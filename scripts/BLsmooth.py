@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # Copyright (C) 2020 - Francesco de Gasperin, Henrik Edler
@@ -29,7 +29,9 @@ from scipy.ndimage import gaussian_filter1d as gfilter
 
 import casacore.tables as pt
 
-from LiLF.lib_multiproc import multiprocManager
+location = "/net/voorrijn/data2/boxelaar/scripts/LiLF_dev"
+sys.path.append(location)
+from LiLF_lib.lib_multiproc import multiprocManager
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s: %(message)s')
 logging.info('BL-based smoother - Francesco de Gasperin, Henrik Edler')
@@ -99,7 +101,7 @@ def smooth_baseline(in_bl, data, weights, std_t, std_f, outQueue=None):
         if not options.nofreq:
             dataR = gfilter(dataR, std_f, axis=1, truncate=3)
             dataI = gfilter(dataI, std_f, axis=1, truncate=3)
-        data = dataR + 1j*dataI # recreate data
+        data = dataR + 1j * dataI # recreate data # type: ignore
     if not options.notime:
         weights = gfilter(weights, std_t, axis=0, truncate=3)
     if not options.nofreq:
@@ -110,7 +112,8 @@ def smooth_baseline(in_bl, data, weights, std_t, std_f, outQueue=None):
     # print( "NANs in flagged data: ", np.count_nonzero(np.isnan(data[flags[in_bl]])))
     # print( "NANs in unflagged data: ", np.count_nonzero(np.isnan(data[~flags[in_bl]])))
     # print( "NANs in weights: ", np.count_nonzero(np.isnan(weights)))
-    outQueue.put([in_bl, data, weights])
+    if outQueue is not None:
+        outQueue.put([in_bl, data, weights])
 
 
 

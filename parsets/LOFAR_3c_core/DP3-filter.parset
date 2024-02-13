@@ -1,0 +1,11 @@
+msin = 
+msin.datacolumn = DATA
+msout = 
+msout.overwrite = True
+
+
+steps = [filter]
+
+filter.type = filter
+filter.baseline = ^RS*&&
+filter.remove = True

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import sys, os, re, glob, time
@@ -8,13 +8,14 @@ from astropy.time import Time
 
 ##########################################
 from LiLF import lib_ms, lib_util, lib_log
-logger_obj = lib_log.Logger('pipeline-preprocess.logger')
+logger_obj = lib_log.Logger('pipeline-preprocess')
 logger = lib_log.logger
 s = lib_util.Scheduler(log_dir = logger_obj.log_dir, dry = False)
 w = lib_util.Walker('pipeline-preprocess.walker')
 
 # parse parset
 parset = lib_util.getParset()
+logger.info('Parset: '+str(dict(parset['LOFAR_preprocess'])))
 parset_dir = parset.get('LOFAR_preprocess','parset_dir')
 fix_table = parset.getboolean('LOFAR_preprocess','fix_table')
 renameavg = parset.getboolean('LOFAR_preprocess','renameavg')
@@ -145,6 +146,8 @@ if renameavg:
                     avg_factor_f = int(nchan / 4)  # to 2 ch/SB
                 elif nchan % 8 == 0 and minfreq < 40e6:
                     avg_factor_f = int(nchan / 8)  # to 8 ch/SB
+                elif nchan % 8 == 0 and 'SPARSE' in MS.getAntennaSet():
+                    avg_factor_f = int(nchan / 8)  # to 8 ch/SB
                 elif nchan % 4 == 0:
                     avg_factor_f = int(nchan / 4)  # to 4 ch/SB
                 elif nchan % 5 == 0:
@@ -161,7 +164,6 @@ if renameavg:
                 if avg_factor_t < 1: avg_factor_t = 1
 
                 MSout = getName(MS.pathMS)
-                flog.write(MS.nameMS+'.MS\n')
                 if avg_factor_f != 1 or avg_factor_t != 1:
                     logger.info('%s->%s: Average in freq (factor of %i) and time (factor of %i)...' % (MS.nameMS, MSout, avg_factor_f, avg_factor_t))
                     if keep_IS:
@@ -182,8 +184,11 @@ if renameavg:
                             MS.move('data-bkp/' + MS.nameMS + '.MS', keepOrig=False, overwrite=False)
                     else:
                         lib_util.check_rm(MS.pathMS)
+                    flog.write(MS.nameMS+'.MS\n') # after averaging to be sure no log is written if an error occurs
                 else:
                     logger.info('%s->%s: Move data - no averaging...' % (MS.nameMS, MSout))
+                    flog.write(MS.nameMS+'.MS\n') # before move or the filenmae is changed
                     MS.move(MSout)
+
 
 logger.info("Done.")

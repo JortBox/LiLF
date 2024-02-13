@@ -1,0 +1,12 @@
+msin =
+msin.datacolumn = DATA
+
+msout = .
+msout.datacolumn = DATA
+
+steps = [corrbeam]
+
+corrbeam.type = applybeam
+corrbeam.usechannelfreq = True
+corrbeam.updateweights = True # add reweight
+corrbeam.beammode = element
