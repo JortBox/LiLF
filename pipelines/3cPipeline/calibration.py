@@ -43,11 +43,12 @@ class SelfCalibration(object):
         self.stats = stats
         self.s = schedule
         
-        self.solint_ph = lib_util.Sol_iterator([10,3,1])
         if stats == "core":
             self.solint_amp = lib_util.Sol_iterator([200,100,50,10,5])
+            self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
             self.solint_amp = lib_util.Sol_iterator([200,100,50])
+            self.solint_ph = lib_util.Sol_iterator([10,3,1])
         
         self.doslow = doslow
         self.doamp = False
@@ -147,7 +148,7 @@ class SelfCalibration(object):
             logger.info('Correction slow AMP+PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
                 cor.parmdb=cal-Ga-c{self.cycle:02d}-{self.stats}.h5 cor.correction=fulljones \
-                cor.soltab=\[amplitude000,phase000\]'
+                cor.soltab=[amplitude000,phase000]'
                 
             self.mss.run(
                 command,

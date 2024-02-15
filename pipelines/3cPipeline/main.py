@@ -5,6 +5,7 @@
 import sys, os, glob
 import numpy as np
 import lsmtool
+import json
 import casacore.tables as pt
 
 sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
@@ -12,6 +13,7 @@ sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
 from LiLF_lib import lib_img, lib_util, lib_log
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 from calibration import SelfCalibration
+from pipeline_utils import *
 
 Logger_obj = lib_log.Logger('pipeline-3c.logger')
 Logger = lib_log.logger
@@ -244,19 +246,19 @@ def setup() -> None:
         )
 
             
-def split_stations(measurement: MeasurementSets, msout: str = "", target_angular_size: float = 0.):
-    baseline = ""
-    if target_angular_size == 0.:
-        baseline = "CS*&&"
-        
+def split_stations(measurements: MeasurementSets, msout: str = "", source_angular_diameter: float = 0.):
+    """
     if msout == "":
-        msout = measurement.getListStr()[0]
+        msout = measurements.getListStr()[0]
+        
+    if source_angular_diameter == 0.:
+        baseline = "CS*&&"
+    else:
+        baseline = stations_to_phaseup(source_angular_diameter, central_freq=57.9)
+    """
     
-    #offsets = get_antenna_offset(measurement.getListStr()[0])
-    
-
     Logger.info('Splitting data in Core and Remote...')
-    measurement.run(
+    measurements.run(
         f'DP3 {parset_dir}/DP3-filter.parset msin=$pathMS msout={msout}',
         log="$nameMS_split.log", 
         commandType="DP3"
@@ -288,7 +290,7 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
             MSs.run(
                 f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
                     cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
-                    cor.soltab=\[amplitude000,phase000\]',
+                    cor.soltab=[amplitude000,phase000]',
                 log='$nameMS_corAMPPHslow-core.log', 
                 commandType='DP3'
             )
@@ -297,14 +299,24 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
             Logger.warning(f"No Core corrections found. Phase-up not recommended")
         
         run_test(MSs)
+    
+        source_angular_diameter = 0.
+        if source_angular_diameter <= 0.:
+            baseline = "CS*"
+            stations = "{SuperStLBA:'%s'}" % baseline
+        else:
+            baseline = stations_to_phaseup(source_angular_diameter, central_freq=57.9)
+            stations = "{SuperStLBA:"+baseline+"}"
 
         # Phaseup CORRECTED_DATA -> DATA
         Logger.info('Phasing up Core Stations...')
+        Logger.debug('Phasing up: '+ baseline)
         lib_util.check_rm(f'*{stats}.MS-phaseup')
+        
         MSs.run(
             f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
                 msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
-                msout.datacolumn=DATA",                
+                msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=^{baseline}\&\&", # type: ignore           
             log=f'$nameMS_phaseup.log', 
             commandType="DP3"
         )
@@ -313,7 +325,7 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
         os.system(f'rm -r *concat_core.MS')
     
     
-    if stats == "def":
+    elif stats == "def":
         with WALKER.if_todo('phaseupCS_' + stats):
             # Phasing up the cose stations
             # Phaseup CORRECTED_DATA -> DATA

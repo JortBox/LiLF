@@ -297,7 +297,7 @@ def phaseup(MSs:MeasurementSets, stats:str) -> MeasurementSets:
         Logger.info('Phasing up Core Stations...')
         lib_util.check_rm(f'*{stats}.MS-phaseup')
         MSs.run(
-            f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
+            f"DP3 {parset_dir}/DP3-phaseup-def.parset msin=$pathMS \
                 msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
                 msout.datacolumn=DATA",                
             log=f'$nameMS_phaseup.log', 
