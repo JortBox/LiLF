@@ -243,12 +243,12 @@ class SelfCalibration(object):
         im = lib_img.Image(imagename+'-MFS-image.fits')
         im.makeMask(self.s, self.cycle, mode="breizorro", threshpix=5, rmsbox=(50,5), atrous_do=True)#, maskname=maskfits) #Pybdsf step here
         #im.makeMask(SCHEDULE, self.cycle, mode="breizorro", threshpix=5, rmsbox=(50,5), atrous_do=True)
-        if region is not None:
-            logger.info("Manual masks found")
+        if (region is not None) and (self.cycle >= 4):
+            logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
         else:
-            logger.info("NO Manual mask found")
+            logger.info("NO Manual mask used")
             
     def clean(self, imagename: str) -> None:
         # special for extended sources:

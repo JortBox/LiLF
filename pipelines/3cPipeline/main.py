@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#from functools import total_ordering
 import sys, os, glob
-import numpy as np
 import lsmtool
-import json
-import casacore.tables as pt
+import numpy as np
 
 sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
 
-from LiLF_lib import lib_img, lib_util, lib_log
-from LiLF_lib.lib_ms import AllMSs as MeasurementSets
-from calibration import SelfCalibration
 from pipeline_utils import *
+from LiLF_lib import lib_util, lib_log
+from calibration import SelfCalibration
+from LiLF_lib.lib_ms import AllMSs as MeasurementSets
+
 
 Logger_obj = lib_log.Logger('pipeline-3c.logger')
 Logger = lib_log.logger
@@ -300,13 +298,14 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
         
         run_test(MSs)
     
-        source_angular_diameter = 0.
-        if source_angular_diameter <= 0.:
+        try:
+            source_angular_diameter = source_angular_size(TARGET)
+            baseline = stations_to_phaseup(source_angular_diameter, central_freq=57.9)
+            stations = "{SuperStLBA:["+baseline+"]}"
+        except:
+            source_angular_diameter = 0.
             baseline = "CS*"
             stations = "{SuperStLBA:'%s'}" % baseline
-        else:
-            baseline = stations_to_phaseup(source_angular_diameter, central_freq=57.9)
-            stations = "{SuperStLBA:"+baseline+"}"
 
         # Phaseup CORRECTED_DATA -> DATA
         Logger.info('Phasing up Core Stations...')
@@ -316,7 +315,7 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
         MSs.run(
             f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
                 msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
-                msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=^{baseline}\&\&", # type: ignore           
+                msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=!{baseline}",       
             log=f'$nameMS_phaseup.log', 
             commandType="DP3"
         )
@@ -346,6 +345,7 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
         check_sun=True
     )
     return MSs          
+    
     
 def demix(MSs: MeasurementSets):
     for ateam in ['VirA', 'TauA', 'CygA', 'CasA']:
@@ -480,16 +480,18 @@ def main() -> None:
             #    if cycle == 1:
             #        calibration.solve_tec()
             
-            # Smooth DATA -> DATA
-            Logger.info('BL-based smoothing...')
-            calibration.mss.run(
-                '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-                    -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
-                log='$nameMS_smooth1.log', 
-                commandType='python'
-            )
+           
                 
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
+                # Smooth DATA -> DATA
+                Logger.info('BL-based smoothing...')
+                calibration.mss.run(
+                    '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+                        -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
+                    log='$nameMS_smooth1.log', 
+                    commandType='python'
+                )
+            
                 if stations == "core":
                     if cycle == 1:
                         calibration.solve_gain('scalar')
