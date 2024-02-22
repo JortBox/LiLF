@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import json
+import json, glob, sys, os
 
 import astropy.units as u
 import astropy.constants as const
@@ -11,6 +11,62 @@ from astropy.io import fits
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 
 PARSET_DIR = "/net/voorrijn/data2/boxelaar/scripts/LiLF/parsets/LOFAR_3c_core/"
+
+RSISlist = [
+    'RS106LBA','RS205LBA','RS208LBA','RS210LBA','RS305LBA','RS306LBA',
+    'RS307LBA','RS310LBA','RS406LBA','RS407LBA','RS409LBA','RS503LBA',
+    'RS508LBA','RS509LBA','DE601LBA','DE602LBA','DE603LBA','DE604LBA',
+    'DE605LBA','DE609LBA','FR606LBA','SE607LBA','UK608LBA','PL610LBA',
+    'PL611LBA','PL612LBA','IE613LBA','LV614LBA'
+]
+
+CS_list = [
+    'CS001LBA','CS002LBA','CS003LBA','CS004LBA','CS005LBA','CS006LBA',
+    'CS007LBA','CS011LBA','CS013LBA','CS017LBA','CS021LBA','CS024LBA',
+    'CS026LBA','CS028LBA','CS030LBA','CS031LBA','CS032LBA','CS101LBA',
+    'CS103LBA','CS201LBA','CS301LBA','CS302LBA','CS401LBA','CS501LBA',
+]
+
+def get_cal_dir(timestamp: str, logger = None) -> list:
+    """
+    Get the proper cal directory from a timestamp
+    """
+    
+    dirs = list()
+    for cal_dir in sorted(glob.glob('../../cals/3c*')):
+        calibrator = cal_dir.split("/")[-1]
+        cal_timestamps = set()
+        for ms in glob.glob(cal_dir+'/20*/data-bkp/*MS'):
+            cal_timestamps.add("_".join(ms.split("/")[-1].split("_")[:2]))
+            
+        if f"{calibrator}_t{timestamp}" in cal_timestamps:
+            if logger is not None:
+                logger.info('Calibrator found: %s (t=%s)' % (cal_dir, timestamp))
+            dirs.append(f"{cal_dir}/{timestamp[:8]}/solutions")
+        else:
+            pass
+        
+    if dirs == []:
+        if logger is not None:
+            logger.error('Missing calibrator.')
+        sys.exit()
+    
+    return dirs
+
+
+def make_beam_region(MSs: MeasurementSets, target: str) -> tuple[str, str|None]:
+    MSs.print_HAcov('plotHAelev.png')
+    MSs.getListObj()[0].makeBeamReg('beam02.reg', freq='mid', pb_cut=0.2)
+    beam02Reg = 'beam02.reg'
+    MSs.getListObj()[0].makeBeamReg('beam07.reg', freq='mid', pb_cut=0.7)
+    beam07reg = 'beam07.reg'
+
+    region = f'{PARSET_DIR}/regions/{target}.reg'
+    if not os.path.exists(region): 
+        region = None
+         
+    return beam02Reg, region
+
 
 def maximum_station_diameter(source_angular_diameter: float, central_freq: float, amp_fraction: float = 0.95, alpha1: float = 1.3) -> float:
     """Calculate maximum station diameter after phasing up stations

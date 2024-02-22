@@ -205,6 +205,9 @@ def setup() -> None:
             SCHEDULE.run(check=True, maxThreads=1)                
     
             MSs = MeasurementSets([MS_concat_all], SCHEDULE)
+            freqs = MSs.getFreqs()
+            center_freq = freqs[len(freqs)//2]
+            Logger.info(f"center frequency: {center_freq/1.e6}")
             
             demix(MSs)
             
@@ -352,7 +355,7 @@ def demix(MSs: MeasurementSets):
         sep = MSs.getListObj()[0].distBrightSource(ateam)
         Logger.info(f'{ateam} - sep: {sep:.0f} deg')
         
-        if sep > 2 and sep < 25 and (ateam != 'CasA' and ateam != 'CygA'):
+        if sep > 2 and sep < 25 and (ateam != 'CasA' and ateam != 'CygA'): # type: ignore
             # CasA and CygA are already demixed in preprocessing
             Logger.warning(f'Demix of {ateam} (sep: {sep:.1f} deg)')
             
@@ -424,14 +427,17 @@ def main() -> None:
             setup() 
     
     for stations in calibration_modes:
-        MSs = MeasurementSets(
-            glob.glob(f'*concat_{stations}.MS'), 
-            SCHEDULE, 
-            check_flags=False
-        )
+        try:
+            MSs = MeasurementSets(
+                    glob.glob(f'*concat_{stations}.MS'), 
+                    SCHEDULE, 
+                    check_flags=False
+                )   
+        except:
+            pass
         
         with WALKER.if_todo(f"clean_{stations}"):
-            clean_specific(stations)       
+            clean_specific(stations)    
 
         if stations != "core": 
             with WALKER.if_todo('phaseupCS ' + stations):

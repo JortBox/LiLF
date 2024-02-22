@@ -236,19 +236,25 @@ class SelfCalibration(object):
             
         self.data_column = "CORRECTED_DATA"
          
+         
     def apply_mask(self, imagename: str, maskfits: str) -> None:
         beam02Reg, region = self.mask
         # check if hand-made mask is available
         # Use masking scheme from LOFAR_dd_wsclean
         im = lib_img.Image(imagename+'-MFS-image.fits')
-        im.makeMask(self.s, self.cycle, mode="breizorro", threshpix=5, rmsbox=(50,5), atrous_do=True)#, maskname=maskfits) #Pybdsf step here
-        #im.makeMask(SCHEDULE, self.cycle, mode="breizorro", threshpix=5, rmsbox=(50,5), atrous_do=True)
-        if (region is not None) and (self.cycle >= 4):
+        #im.makeMask(self.s, self.cycle, mode="breizorro", threshpix=5, rmsbox=(50,5), atrous_do=True)#, maskname=maskfits) #Pybdsf step here
+        if self.stats == "core":
+            im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
+        else:
+            im.makeMask(mode="default", threshpix=4, rmsbox=(100,20), atrous_do=True)
+            
+        if (region is not None) and (self.stats == "all") and (self.cycle <= 2):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
         else:
             logger.info("NO Manual mask used")
+            
             
     def clean(self, imagename: str) -> None:
         # special for extended sources:

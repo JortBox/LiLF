@@ -89,9 +89,9 @@ class Image(object):
         for model_img in sorted(glob.glob(self.root+'*model*.fits')):
             fits = pyfits.open(model_img)
             # get frequency
-            assert fits[0].header['CTYPE3'] == 'FREQ'
-            nu = fits[0].header['CRVAL3']
-            data = fits[0].data
+            assert fits[0].header['CTYPE3'] == 'FREQ' # type: ignore
+            nu = fits[0].header['CRVAL3'] # type: ignore
+            data = fits[0].data # type: ignore
             # find expected flux
             flux = funct_flux(nu)
             current_flux = np.sum(data)
@@ -99,7 +99,7 @@ class Image(object):
             scaling_factor = flux/current_flux
             logger.warning('Rescaling model %s by: %f' % (model_img, scaling_factor))
             data *= scaling_factor
-            fits[0].data = data
+            fits[0].data = data # type: ignore
             fits.writeto(model_img, overwrite=True)
             fits.close()
 
@@ -149,11 +149,11 @@ class Image(object):
 
             # get data
             with pyfits.open(self.imagename) as fits:
-                data = np.squeeze(fits[0].data)
+                data = np.squeeze(fits[0].data) # type: ignore
 
             # get mask
             with pyfits.open(maskname) as fits:
-                mask = np.squeeze(fits[0].data)
+                mask = np.squeeze(fits[0].data) # type: ignore
 
                 # for each island calculate the catoff
                 blobs, number_of_blobs = label(mask.astype(int).squeeze(), structure=[[1,1,1],[1,1,1],[1,1,1]])
@@ -166,7 +166,7 @@ class Image(object):
                     #mask[0,0,this_blob] = ratio # debug
 
                 # write mask back
-                fits[0].data[0,0] = mask
+                fits[0].data[0,0] = mask # type: ignore
                 fits.writeto(maskname, overwrite=True)
 
         if self.userReg is not None:
@@ -192,7 +192,7 @@ class Image(object):
 
         if checkBeam:
             if self.beamReg is None:
-                raise('Missing beam in selectCC.')
+                raise('Missing beam in selectCC.') 
             logger.info('Predict (apply beam reg %s)...' % self.beamReg)
             blank_image_reg(maskname, self.beamReg, inverse=keepInBeam, blankval=0) # if keep_in_beam set to 0 everything outside beam.reg
 
@@ -218,8 +218,8 @@ class Image(object):
 
         with pyfits.open(self.imagename) as fits:
             with pyfits.open(self.maskname) as mask:
-                data = np.squeeze(fits[0].data)
-                mask = np.squeeze(mask[0].data)
+                data = np.squeeze(fits[0].data) # type: ignore
+                mask = np.squeeze(mask[0].data) # type: ignore
                 if boxsize is not None:
                     ys,xs = data.shape
                     data = data[ys/2-boxsize/2:ys/2+boxsize/2,xs/2-boxsize/2:xs/2+boxsize/2]
@@ -232,7 +232,7 @@ class Image(object):
         Return the ratio of the max over min in the image
         """   
         with pyfits.open(self.imagename) as fits:
-            data = np.squeeze(fits[0].data)
+            data = np.squeeze(fits[0].data) # type: ignore
             return np.abs(np.max(data)/np.min(data))
 
     def getBeam(self):
@@ -254,10 +254,10 @@ class Image(object):
         The flux of the image
         """
         with pyfits.open(self.imagename) as fits:
-            if fits[0].header['CTYPE3'] == 'FREQ':
-                return fits[0].header['CRVAL3']
-            elif fits[0].header['CTYPE4'] == 'FREQ':
-                return fits[0].header['CRVAL4']
+            if fits[0].header['CTYPE3'] == 'FREQ': # type: ignore
+                return fits[0].header['CRVAL3'] # type: ignore
+            elif fits[0].header['CTYPE4'] == 'FREQ': # type: ignore
+                return fits[0].header['CRVAL4'] # type: ignore
             else:
                 raise RuntimeError('Cannot find frequency in image %s' % self.imagename)
 
@@ -323,12 +323,12 @@ def blank_image_fits(filename, maskname, outfile = None, inverse = False, blankv
         outfile = filename
 
     with pyfits.open(maskname) as fits:
-        mask = fits[0].data
+        mask = fits[0].data # type: ignore
     
     if (inverse): mask = ~(mask.astype(bool))
 
     with pyfits.open(filename) as fits:
-        data = fits[0].data
+        data = fits[0].data # type: ignore
 
         assert mask.shape == data.shape # mask and data should be same shape
 
@@ -357,7 +357,7 @@ def blank_image_reg(filename, region, outfile = None, inverse = False, blankval 
 
     # open fits
     with pyfits.open(filename) as fits:
-        origshape    = fits[0].data.shape
+        origshape    = fits[0].data.shape # type: ignore
         header, data = flatten(fits)
         sum_before   = np.sum(data)
         if (op == 'AND'):
@@ -376,7 +376,7 @@ def blank_image_reg(filename, region, outfile = None, inverse = False, blankval 
             total_mask = ~total_mask
         data[total_mask] = blankval
         # save fits
-        fits[0].data = data.reshape(origshape)
+        fits[0].data = data.reshape(origshape) # type: ignore
         fits.writeto(outfile, overwrite=True)
 
     logger.debug("%s: Blanking (%s): sum of values: %f -> %f" % (filename, region, sum_before, np.sum(data)))
@@ -404,11 +404,11 @@ def regrid(image_in, header_from, image_out):
     header_in, data_in = flatten(fits.open(image_in))
 
     # do the regrid
-    logging.info('Regridding %s->%s' % (image_in, image_out))
+    #logging.info('Regridding %s->%s' % (image_in, image_out))
     data_out, footprint = reproj((data_in, header_in), header_rep, parallel=True)
 
     # write output
-    header_rep =  fits.open(header_from)[0].header
+    header_rep =  fits.open(header_from)[0].header # type: ignore
     hdu = fits.PrimaryHDU(header=header_rep, data=[[data_out]])
     hdu.writeto(image_out, overwrite=True)
 
@@ -417,9 +417,9 @@ def add_beam(imagefile, bmaj, bmin, bpa):
     Add/change beam info to fits header
     """
     with pyfits.open(imagefile) as fits:
-        header = fits[0].header
+        header = fits[0].header # type: ignore
         header["BMAJ"] = bmaj
         header["BMIN"] = bmin
         header["BPA"] = bpa
-        fits[0].header = header
+        fits[0].header = header # type: ignore
         fits.writeto(imagefile, overwrite=True)

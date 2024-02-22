@@ -35,7 +35,7 @@ class AllMSs(object):
             logger.error('Cannot find MS files.')
             raise('Cannot find MS files.')
 
-        self.mssListObj = []
+        self.mssListObj: list[MS] = []
         for pathMS in sorted(pathsMS):
             ms = MS(pathMS)
             if check_flags and ms.isAllFlagged(): 
@@ -96,8 +96,8 @@ class AllMSs(object):
         """
         Return a list of freqs per chan per SB
         """
-        freqs = [ list(ms.getFreqs()) for ms in self.mssListObj ]
-        return np.array([item for sublist in freqs for item in sublist]).flatten()
+        freqs = [ ms.getFreqs() for ms in self.mssListObj ]
+        return np.array([item for sublist in freqs for item in sublist], dtype=np.float64).flatten()
 
 
     def getBandwidth(self):
@@ -361,14 +361,14 @@ class MS(object):
         return stringCurrent
 
 
-    def getFreqs(self):
+    def getFreqs(self) -> list[float]:
         """
         Get chan frequencies in Hz
         """
         with tables.table(self.pathMS + "/SPECTRAL_WINDOW", ack = False) as t:
             freqs = t.getcol("CHAN_FREQ")
 
-        return freqs[0]
+        return list(freqs[0])
 
 
     def getNchan(self):

@@ -15,8 +15,8 @@ def make_mask(image_name, mask_name=None, threshpix=5, atrous_do=False, rmsbox=(
     else: stop_at = 'isl'
 
     # DO THE SOURCE DETECTION
-    img = bdsf.process_image(image_name, rms_box=rmsbox, frequency=54e6,
-        thresh_isl=float(threshpix*4/5), thresh_pix=float(threshpix), rms_map=True, mean_map='zero', atrous_do=atrous_do, atrous_jmax=4,
+    img = bdsf.process_image(image_name, rms_box=rmsbox, frequency=58e6,
+        thresh_isl=float(threshpix*3./5), thresh_pix=float(threshpix), rms_map=True, mean_map='zero', atrous_do=atrous_do, atrous_jmax=4, # NOTE: thresh_isl = float(threshpix*4./5)
         adaptive_rms_box=True, adaptive_thresh=adaptive_thresh, rms_box_bright=(30,5),
         flagging_opts=True, flag_maxsize_fwhm=0.5, stop_at=stop_at, quiet=True, debug=False)
 
@@ -38,12 +38,12 @@ def make_mask(image_name, mask_name=None, threshpix=5, atrous_do=False, rmsbox=(
     if not mask_combine is None:
         print("Doing a pix-by-pix OR with %s." % mask_combine)
         with pyfits.open(mask_combine) as fits:
-            data_comb = fits[0].data
+            data_comb = fits[0].data # type: ignore
         with pyfits.open(mask_name) as fits:
-            data = fits[0].data
+            data = fits[0].data # type: ignore
             assert data.shape == data_comb.shape
             data[(data_comb == 1.)] = 1.
-            fits[0].data = data
+            fits[0].data = data # type: ignore
             fits.writeto(mask_name, overwrite=True)
 
     return mask_name
