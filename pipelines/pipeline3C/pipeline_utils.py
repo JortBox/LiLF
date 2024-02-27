@@ -53,6 +53,20 @@ def get_cal_dir(timestamp: str, logger = None) -> list:
     
     return dirs
 
+def rename_final_images(files: list[str]):
+    path = '/'.join(files[0].split('/')[:-1])
+    for image in reversed(files):
+        try: 
+            cycle = int(image.split('-')[-3])
+            break
+        except: 
+            print(image.split('-'), "cannot be converted to float")
+            continue
+        
+    for file in glob.glob(f'{path}/img-all-{cycle:02d}-MFS*'):
+        suffix = file.split('-')[-1]
+        new_path = path + "/img-final-MFS-" + suffix
+        os.system(f"cp {file} {new_path}")
 
 def make_beam_region(MSs: MeasurementSets, target: str) -> tuple[str, str|None]:
     MSs.print_HAcov('plotHAelev.png')

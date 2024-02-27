@@ -240,6 +240,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                 log='$nameMS_corAMPPHslow-core.log', 
                 commandType='DP3'
             )
+        
   
         else:
             Logger.warning(f"No Core corrections found. Phase-up not recommended")
@@ -366,6 +367,7 @@ def clean_specific(mode: str) -> None :
     if not os.path.exists("img/"):
         os.makedirs('img')
         
+
     
 def main(args: argparse.Namespace) -> None:
     #with WALKER.if_todo('setup'):
@@ -452,8 +454,10 @@ def main(args: argparse.Namespace) -> None:
                 
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 if stopping: 
-                    break         
-                                  
+                    break    
+        if stations == "all":            
+            pipeline.rename_final_images(glob.glob('img/img-all-*'))       
+                           
     Logger.info("Done.")
 
 

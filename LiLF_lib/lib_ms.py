@@ -98,8 +98,10 @@ class AllMSs(object):
         """
         freqs = [ ms.getFreqs() for ms in self.mssListObj ]
         return np.array([item for sublist in freqs for item in sublist], dtype=np.float64).flatten()
-
-
+    
+    def getCenterFreq(self):
+        return np.array([ms.getCenterFreq() for ms in self.mssListObj])
+        
     def getBandwidth(self):
         """
         Return the total span of frequency covered by this MS set
@@ -369,6 +371,10 @@ class MS(object):
             freqs = t.getcol("CHAN_FREQ")
 
         return list(freqs[0])
+    
+    def getCenterFreq(self):
+        freqs = self.getFreqs()
+        return float(freqs[len(freqs)//2])
 
 
     def getNchan(self):

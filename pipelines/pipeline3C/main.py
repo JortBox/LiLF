@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
 
-from pipeline_utils import *
+from pipeline_utils import * # type: ignore
 from LiLF_lib import lib_util, lib_log
 from calibration import SelfCalibration
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
@@ -71,6 +71,7 @@ def run_test(measurements: MeasurementSets) -> None:
         f'diag-test', 
         [f'{ms}/cal-diag.h5' for ms in test_mss.getListStr()],
         [
+            parset_dir+'/losoto-ampnorm-scalar.parset',
             parset_dir+'/losoto-clip.parset', 
             parset_dir+'/losoto-plot2d.parset', 
             parset_dir+'/losoto-plot2d-pol.parset', 
@@ -271,6 +272,7 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
     if stats == "all":
         Logger.info('Correcting CS...')
         fulljones_solution = sorted(glob.glob("cal-Ga*core.h5"))
+        scalar_solution = sorted(glob.glob("cal-Gp*core.h5"))
         
         """
         solution = sorted(glob.glob("cal-Gp*core.h5"))
@@ -284,7 +286,7 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
                     commandType='DP3'
                 )
         """
-        
+
         if len(fulljones_solution) != 0:
             Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
@@ -293,6 +295,16 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
                     cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
                     cor.soltab=[amplitude000,phase000]',
                 log='$nameMS_corAMPPHslow-core.log', 
+                commandType='DP3'
+            )
+            
+        elif len(scalar_solution) != 0:
+            Logger.info("correction Gp")
+            # correcting CORRECTED_DATA -> CORRECTED_DATA
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
+                    cor.parmdb={scalar_solution[-1]} cor.correction=phase000',
+                log='$nameMS_corPH-core.log', 
                 commandType='DP3'
             )
   
@@ -307,8 +319,9 @@ def phaseup(MSs: MeasurementSets, stats: str) -> MeasurementSets:
             stations = "{SuperStLBA:["+baseline+"]}"
         except:
             source_angular_diameter = 0.
-            baseline = "CS*"
+            baseline = "CS00[2-7]*"
             stations = "{SuperStLBA:'%s'}" % baseline
+            Logger.info(f"Not using adaptive phase-up. Phasing up superterp only")
 
         # Phaseup CORRECTED_DATA -> DATA
         Logger.info('Phasing up Core Stations...')
@@ -423,8 +436,8 @@ def main() -> None:
     calibration_modes = ["core","all"]   
     
     with WALKER.if_todo('setup'):
-            #set up corected data
-            setup() 
+        #set up corected data
+        setup() 
     
     for stations in calibration_modes:
         try:
@@ -499,10 +512,11 @@ def main() -> None:
                 )
             
                 if stations == "core":
-                    if cycle == 1:
+                    if cycle == 1:                              
                         calibration.solve_gain('scalar')
-                        
-                    calibration.solve_gain("fulljones")
+                    
+                    if doslow: 
+                        calibration.solve_gain("fulljones")
                     
                 else:   
                     if calibration.doph:
@@ -519,8 +533,11 @@ def main() -> None:
                 
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 if stopping: 
-                    break         
-                                  
+                    break        
+                 
+        if stations == "all":    
+            rename_final_images(glob.glob('img/img-all-*'))            
+      
     Logger.info("Done.")
 
 
