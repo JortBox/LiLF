@@ -253,7 +253,7 @@ class SelfCalibration(object):
         else:
             im.makeMask(mode="default", threshpix=5, rmsbox=(100,27), atrous_do=True)
             
-        if (region is not None) and (self.stats == "all") and (not self.doamp) and (self.ampcycle <= 2):
+        if (region is not None) and (self.stats == "all") and (self.ampcycle <= 3):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
