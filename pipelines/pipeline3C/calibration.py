@@ -103,8 +103,8 @@ class SelfCalibration(object):
             
             lib_util.run_losoto(
                 self.s, 
-                f'Gp-c{self.cycle:02d}-{self.stats}', 
-                [f'{ms}/calGp-{self.stats}-ampnorm.h5' for ms in self.mss.getListStr()],
+                f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
                 [
                     parset_dir+'/losoto-ampnorm-scalar.parset',
                     parset_dir+'/losoto-clip-large.parset', 
@@ -161,8 +161,8 @@ class SelfCalibration(object):
             
             lib_util.run_losoto(
                 self.s, 
-                f'Ga-c{self.cycle:02d}-{self.stats}', 
-                [ms+'/calGa-'+self.stats+'-ampnorm.h5' for ms in self.mss.getListStr()],
+                f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
                 [
                     parset_dir+'/losoto-ampnorm-full.parset',
                     parset_dir+'/losoto-clip.parset', 
