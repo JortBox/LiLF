@@ -53,7 +53,7 @@ def get_cal_dir(timestamp: str, logger = None) -> list:
     
     return dirs
 
-def rename_final_images(files: list[str]):
+def rename_final_images(files: list[str], target: str = ""):
     path = '/'.join(files[0].split('/')[:-1])
     for image in reversed(files):
         try: 
@@ -65,7 +65,7 @@ def rename_final_images(files: list[str]):
         
     for file in glob.glob(f'{path}/img-all-{cycle:02d}-MFS*'):
         suffix = file.split('-')[-1]
-        new_path = path + "/img-final-MFS-" + suffix
+        new_path = f"{path}/{target}-img-final-MFS-{suffix}"
         os.system(f"cp {file} {new_path}")
 
 def make_beam_region(MSs: MeasurementSets, target: str) -> tuple[str, str|None]:

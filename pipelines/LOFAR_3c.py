@@ -47,10 +47,18 @@ def run_test(measurements: MeasurementSets) -> None:
     
     predict(test_mss)
     
+    Logger.info('BL-based smoothing...')
+    test_mss.run(
+        '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+            -r -s 0.8 -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', 
+        log='$nameMS_smooth1.log', 
+        commandType='python'
+    )
+    
     Logger.info(f'Solving diagonal test...')
     test_mss.run(
         f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-            msin.datacolumn=CORRECTED_DATA sol.mode=diagonal \
+            msin.datacolumn=SMOOTHED_DATA sol.mode=diagonal \
             sol.h5parm=$pathMS/cal-diag.h5 \
             sol.solint=15 sol.smoothnessconstraint=1e6',
         log=f'$nameMS_sol-diag_test.log', 
@@ -454,9 +462,10 @@ def main(args: argparse.Namespace) -> None:
                 
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 if stopping: 
-                    break    
+                    break 
+                   
         if stations == "all":            
-            pipeline.rename_final_images(glob.glob('img/img-all-*'))       
+            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
                            
     Logger.info("Done.")
 

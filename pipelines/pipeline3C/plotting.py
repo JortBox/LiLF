@@ -23,11 +23,6 @@ plt.rc('font', family='serif')
 #plt.rc('text',usetex=True)
 
 
-
-
-
-
-
 def restructure_fits(path: str, size: int = 200):
     size = int(np.round(size/2))
     
@@ -91,12 +86,13 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None):
     os.remove('test.fits')
     
 if __name__ == "__main__":
-    catalog = Catalogue3C(["3c48"])
-    
+    TARGET = "3c225b"
     DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
-
     
+    catalog = Catalogue3C(["3c225b"])
     for source in catalog:
-        source.set_data(DATA_DIR + source.name + "/img/img-final-MFS-image.fits")
-        get_integrated_flux(source)
+        source.set_data(f"{DATA_DIR}{source.name}/no-ampnorm-2/img/{source.name}-img-final-MFS-image.fits")
+        
+        print(source.rms)
+        get_integrated_flux(source, threshold=9)
         #plot_galaxy(source, vmax=0.75*np.max(source.data.value), vmin=-5*source.rms.value)

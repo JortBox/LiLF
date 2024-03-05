@@ -215,7 +215,7 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
     
     flux = np.zeros(data.shape) * u.Jy/source.beam
     flux[data > threshold * source.rms] = data[data > threshold * source.rms]
-    flux[r > 15] = 0
+    #flux[r > 15] = 0
 
     total_flux = np.sum(flux.to(u.Jy/source.pix)) * 1. * source.pix 
     print(source.rms.to(u.Jy/source.pix) * flux[flux>0].shape[0] * source.pix)
@@ -246,7 +246,7 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
         plt.savefig("flux.png", dpi=300)
         plt.clf()
     
-
+'''
 def get_total_flux(file: str, path: str = DATA_DIR, size: int = 100, threshold: float = 5, plot:bool=True):
     size //= 2
     hdu: fits.PrimaryHDU = fits.open(path + file)[0] # type: ignore
@@ -266,7 +266,7 @@ def get_total_flux(file: str, path: str = DATA_DIR, size: int = 100, threshold: 
     
     flux = np.zeros(data.shape) * u.Jy/u_beam
     flux[data > threshold * rms] = data[data > threshold * rms]
-    flux[r > 11] = 0
+    #flux[r > 11] = 0
     
     
     print(rms.to(u.Jy/u_pix) * flux[flux>0].shape[0] * u_pix)
@@ -287,6 +287,7 @@ def get_total_flux(file: str, path: str = DATA_DIR, size: int = 100, threshold: 
     a3 = 0.549
     S = a0 * 10**(a1 * np.log10(57.7/150)) * 10**(a2 * np.log10(57.7/150)**2) * 10**(a3 * np.log10(57.7/150)**3)
     print(S)
+'''  
     
 '''   
 def rename_final_images(files: list[str]):
@@ -306,12 +307,9 @@ def rename_final_images(files: list[str]):
 '''  
 
 if __name__ == "__main__":
-    target = "3c109"
+    target = "3c48"
     img_path = DATA_DIR + target + "/img/"
     #rename_final_images(glob.glob(f"{DATA_DIR}{target}/img/img-all-*"))
         
-    sys.exit()
-    
-    
-    get_total_flux("img-core-04-MFS-image.fits", path = img_path)
+    #sys.exit()
     

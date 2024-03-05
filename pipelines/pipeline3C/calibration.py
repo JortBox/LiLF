@@ -39,6 +39,7 @@ class SelfCalibration(object):
         self.mss = MSs
         self.stop = total_cycles
         self.cycle = 0
+        self.ampcycle = 0
         self.mask = mask
         self.stats = stats
         self.s = schedule
@@ -65,7 +66,8 @@ class SelfCalibration(object):
         
         else:
             self.data_column = 'DATA'
-            
+            if self.doamp:
+                self.ampcycle += 1
             self.cycle += 1
             logger.info('== Start cycle: %s ==' % self.cycle)  
             return self.cycle
@@ -92,7 +94,7 @@ class SelfCalibration(object):
                 f'Gp-c{self.cycle:02d}-{self.stats}', 
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
                 [
-                    parset_dir+'/losoto-ampnorm-scalar.parset',
+                    #parset_dir+'/losoto-ampnorm-scalar.parset',
                     parset_dir+'/losoto-clip-large.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot.parset'
@@ -138,7 +140,7 @@ class SelfCalibration(object):
                 f'Ga-c{self.cycle:02d}-{self.stats}', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
                 [
-                    parset_dir+'/losoto-ampnorm-full.parset',
+                    #parset_dir+'/losoto-ampnorm-full.parset',
                     parset_dir+'/losoto-clip.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot2d-pol.parset', 
@@ -249,9 +251,9 @@ class SelfCalibration(object):
         if self.stats == "core":
             im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
         else:
-            im.makeMask(mode="default", threshpix=4, rmsbox=(100,20), atrous_do=True)
+            im.makeMask(mode="default", threshpix=5, rmsbox=(100,27), atrous_do=True)
             
-        if (region is not None) and (self.stats == "all") and (self.cycle <= 2):
+        if (region is not None) and (self.stats == "all") and (not self.doamp) and (self.ampcycle <= 2):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
