@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys, os, glob
-import lsmtool
+import lsmtool #type: ignore 
 import numpy as np
 import argparse
 
