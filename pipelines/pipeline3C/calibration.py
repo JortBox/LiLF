@@ -89,7 +89,7 @@ class SelfCalibration(object):
                 commandType="DP3"
             )
             
-            lib_util.run_losoto(
+            '''lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}', 
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
@@ -99,7 +99,7 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-plot.parset'
                     
                 ]
-            )
+            )'''
             
             lib_util.run_losoto(
                 self.s, 
@@ -146,7 +146,8 @@ class SelfCalibration(object):
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-            lib_util.run_losoto(
+            
+            '''lib_util.run_losoto(
                 self.s, 
                 f'Ga-c{self.cycle:02d}-{self.stats}', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
@@ -157,7 +158,7 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-plot-pol.parset'
                     
                 ]  
-            )
+            )'''
             
             lib_util.run_losoto(
                 self.s, 
