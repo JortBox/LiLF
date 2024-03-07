@@ -89,7 +89,7 @@ class SelfCalibration(object):
                 commandType="DP3"
             )
             
-            '''lib_util.run_losoto(
+            lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}', 
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
@@ -99,7 +99,7 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-plot.parset'
                     
                 ]
-            )'''
+            )
             
             lib_util.run_losoto(
                 self.s, 
@@ -117,7 +117,7 @@ class SelfCalibration(object):
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}.h5 cor.correction=phase000'
+                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=phase000'
                 
             self.mss.run(
                 command, log=f'$nameMS_corPH-c{self.cycle:02d}.log', commandType='DP3'
@@ -147,7 +147,7 @@ class SelfCalibration(object):
                 commandType="DP3"
             )
             
-            '''lib_util.run_losoto(
+            lib_util.run_losoto(
                 self.s, 
                 f'Ga-c{self.cycle:02d}-{self.stats}', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
@@ -158,7 +158,7 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-plot-pol.parset'
                     
                 ]  
-            )'''
+            )
             
             lib_util.run_losoto(
                 self.s, 
@@ -177,7 +177,7 @@ class SelfCalibration(object):
             # Correct CORRECTED_DATA -> CORRECTED_DATA
             logger.info('Correction slow AMP+PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Ga-c{self.cycle:02d}-{self.stats}.h5 cor.correction=fulljones \
+                cor.parmdb=cal-Ga-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=fulljones \
                 cor.soltab=[amplitude000,phase000]'
                 
             self.mss.run(
