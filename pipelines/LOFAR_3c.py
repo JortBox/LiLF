@@ -223,7 +223,7 @@ def split_stations(measurements: MeasurementSets, msout: str = "", source_angula
 def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> MeasurementSets:
     if stats == "all":
         Logger.info('Correcting CS...')
-        fulljones_solution = sorted(glob.glob("cal-Ga*core.h5"))
+        fulljones_solution = sorted(glob.glob("cal-Ga*core-ampnorm.h5"))
         
         """
         solution = sorted(glob.glob("cal-Gp*core.h5"))
