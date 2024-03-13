@@ -4,6 +4,6 @@ Ncpu = 0
 operation = NORM
 soltab = sol000/amplitude000
 normVal = 1.
-axesToNorm = [time, freq] 
+axesToNorm = [time, ant] 
 log = True
 pol = XX,YY

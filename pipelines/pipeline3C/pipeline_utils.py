@@ -68,7 +68,7 @@ def rename_final_images(files: list[str], target: str = ""):
         new_path = f"{path}/{target}-img-final-MFS-{suffix}"
         os.system(f"cp {file} {new_path}")
 
-def make_beam_region(MSs: MeasurementSets, target: str) -> tuple[str, str|None]:
+def make_beam_region(MSs: MeasurementSets, target: str) -> tuple[str, str, str|None]:
     MSs.print_HAcov('plotHAelev.png')
     MSs.getListObj()[0].makeBeamReg('beam02.reg', freq='mid', pb_cut=0.2)
     beam02Reg = 'beam02.reg'
@@ -79,7 +79,7 @@ def make_beam_region(MSs: MeasurementSets, target: str) -> tuple[str, str|None]:
     if not os.path.exists(region): 
         region = None
          
-    return beam02Reg, region
+    return beam02Reg, beam07reg, region
 
 
 def maximum_station_diameter(source_angular_diameter: float, central_freq: float, amp_fraction: float = 0.95, alpha1: float = 1.3) -> float:

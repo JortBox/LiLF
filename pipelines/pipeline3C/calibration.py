@@ -30,11 +30,11 @@ class SelfCalibration(object):
     def __init__(
             self, 
             MSs: MeasurementSets, 
-            total_cycles: int, 
             mask: tuple, 
             schedule: lib_util.Scheduler,
-            doslow: bool=False, 
-            stats: str="all"
+            total_cycles: int = 10, 
+            doslow: bool = False, 
+            stats: str = "all"
         ):
         self.mss = MSs
         self.stop = total_cycles
@@ -55,6 +55,8 @@ class SelfCalibration(object):
         self.doamp = False
         self.doph = True
         self.data_column = "DATA"
+        self.rms_history = list()
+        self.ratio_history = list()
         
         
     def __iter__(self):
@@ -73,13 +75,30 @@ class SelfCalibration(object):
             return self.cycle
         
         
-    def solve_gain(self, mode:str) -> None:
+    def solve_gain(self, mode:str, solint: int|None = None) -> None:
         assert mode in ["scalar", "fulljones"]
+        if solint is None:
+            if mode == "scalar":
+                solint = next(self.solint_ph)
+            else: 
+                solint = next(self.solint_amp)
+        else:
+            solint = int(solint)
+        
+
+        # Smooth CORRECTED_DATA -> SMOOTHED_DATA
+        logger.info('BL-based smoothing...')
+        self.mss.run(
+            f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+                -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+            log='$nameMS_smooth1.log', 
+            commandType='python'
+        )     
         
         logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
         if mode == 'scalar':
             # solve G - group*_TC.MS:CORRECTED_DATA
-            solint = next(self.solint_ph)
+            #solint = next(self.solint_ph)
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalar \
@@ -88,7 +107,7 @@ class SelfCalibration(object):
                 log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-            
+            '''
             lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}', 
@@ -97,10 +116,9 @@ class SelfCalibration(object):
                     #parset_dir+'/losoto-clip-large.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot.parset'
-                    
                 ]
             )
-            
+            '''
             lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
@@ -110,7 +128,6 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-clip-large.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot.parset'
-                    
                 ]
             )
         
@@ -125,28 +142,18 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
-            if self.data_column == "CORRECTED_DATA":
-                # Smooth CORRECTED_DATA -> SMOOTHED_DATA
-                logger.info('BL-based smoothing...')
-                self.mss.run(
-                    '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-                        -r -s 0.8 -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', 
-                    log='$nameMS_smooth1.log', 
-                    commandType='python'
-                )
-                
             # solve G - group*_TC.MS:CORRECTED_DATA
             #sol.antennaconstraint=[[RS509LBA,...]] \
-            solint = next(self.solint_amp)
+            #solint = next(self.solint_amp)
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=fulljones \
                     sol.h5parm=$pathMS/calGa-{self.stats}.h5  \
-                    sol.solint={solint} sol.smoothnessconstraint=1e6',
+                    sol.solint={solint} sol.smoothnessconstraint=2e6',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-            
+            '''
             lib_util.run_losoto(
                 self.s, 
                 f'Ga-c{self.cycle:02d}-{self.stats}', 
@@ -156,21 +163,20 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot2d-pol.parset', 
                     parset_dir+'/losoto-plot-pol.parset'
-                    
                 ]  
             )
-            
+            '''
             lib_util.run_losoto(
                 self.s, 
                 f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
                 [
-                    parset_dir+'/losoto-ampnorm-full.parset',
+                    parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                    parset_dir+'/losoto-ampnorm-full-offdiagonal.parset',
                     parset_dir+'/losoto-clip.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot2d-pol.parset', 
                     parset_dir+'/losoto-plot-pol.parset'
-                    
                 ]  
             )
                         
@@ -268,7 +274,7 @@ class SelfCalibration(object):
          
          
     def apply_mask(self, imagename: str, maskfits: str) -> None:
-        beam02Reg, region = self.mask
+        beam02Reg, _, region = self.mask
         # check if hand-made mask is available
         # Use masking scheme from LOFAR_dd_wsclean
         im = lib_img.Image(imagename+'-MFS-image.fits')
@@ -278,7 +284,7 @@ class SelfCalibration(object):
         else:
             im.makeMask(mode="default", threshpix=5, rmsbox=(100,27), atrous_do=True)
             
-        if (region is not None) and (self.stats == "all"):# and (self.ampcycle <= 3):
+        if (region is not None) and (self.stats == "all") and (self.doamp):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
@@ -286,7 +292,7 @@ class SelfCalibration(object):
             logger.info("NO Manual mask used")
             
             
-    def clean(self, imagename: str) -> None:
+    def clean(self, imagename: str, uvlambdamin: int = 30) -> None:
         # special for extended sources:
         
         if TARGET in very_extended_targets:
@@ -340,7 +346,7 @@ class SelfCalibration(object):
             baseline_averaging='',
             niter=1000, 
             no_update_model_required='', 
-            minuv_l=30, 
+            minuv_l=uvlambdamin, 
             mgain=0.4, 
             nmiter=0,
             auto_threshold=5, 
@@ -363,13 +369,13 @@ class SelfCalibration(object):
             self.s, 
             'wsclean2-c%02i.log' % self.cycle, 
             self.mss.getStrWsclean(), 
+            name=imagename,
             do_predict=True, 
             cont=True, 
-            name=imagename,
             parallel_gridding=4,
             niter=1000000, 
             no_update_model_required='',
-            minuv_l=30, 
+            minuv_l=uvlambdamin, 
             mgain=0.4, 
             nmiter=0,
             auto_threshold=0.5, 
@@ -389,6 +395,9 @@ class SelfCalibration(object):
     
     def prepare_next_iter(self, imagename: str, rms_noise_pre: float, mm_ratio_pre: float) -> tuple[float, float, bool]:
         stopping = False
+        self.rms_history.append(rms_noise_pre)
+        self.ratio_history.append(mm_ratio_pre)
+        
         im = lib_img.Image(imagename+'-MFS-image.fits')
         im.makeMask(self.s, self.cycle, threshpix=5, rmsbox=(500,30), atrous_do=False )
         rms_noise = float(im.getNoise()) 

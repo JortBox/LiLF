@@ -12,6 +12,9 @@ from astropy.units.quantity import Quantity
 from astroquery.vizier import Vizier 
 from astroquery.ipac.ned import Ned
 from astropy.coordinates import SkyCoord
+from astropy.table import Table as AstroTab
+
+import LiLF_lib.lib_img as lilf
 
 
 Vizier.ROW_LIMIT = -1
@@ -21,6 +24,7 @@ class Source3C(object):
         self.name = name
         self.z = 0
         self._default_rms = False
+        self.data_set = False
         
     def set_redshift(self, z: float):
         self.z = z
@@ -45,9 +49,13 @@ class Source3C(object):
         self.data: Quantity = np.asarray(hdu.data, dtype=np.float64)[0,0,:,:] * u.Jy/self.beam
         self.header = hdu.header
         self.path = path
+        self.data_set = True
     
     @property
     def rms(self) -> Quantity:
+        if not self.data_set:
+            return 0. * u.Jy/self.beam
+        
         if not self._default_rms:
             return get_rms(self.data.value) * u.Jy/self.beam
         else:
@@ -170,6 +178,26 @@ class Catalogue3C(object):
 
 
 DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
+
+def measure_flux(path: str) -> float:
+    # load skymodel
+    full_image = lilf.Image(path)
+    mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
+    
+    full_image.makeMask(
+        mode="default",
+        threshpix=5,
+        atrous_do=False,
+        maskname=mask_ddcal,
+        write_srl=True,
+        write_ds9=True,
+    )
+    
+    cal = AstroTab.read(mask_ddcal.replace("fits", "cat.fits"), format="fits")
+    cal = cal[np.where(cal["Total_flux"] > 10)]
+    cal.sort(["Total_flux"], reverse=True)
+
+    return cal["Total_flux"][0]
 
 def get_rms(data, niter=100, maskSup=1e-7):
     m      = data[np.abs(data)>maskSup]

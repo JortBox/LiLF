@@ -18,9 +18,6 @@ import pipeline3C as pipeline
 #TARGET = os.getcwd().split('/')[-1]
 #DATA_DIR = f'/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/{TARGET}'
 
-
-
-
 def get_argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='3C-pipeline [options]')
     parser.add_argument('-t', '--target', dest="target", type=str, default=os.getcwd().split('/')[-1], 
@@ -79,20 +76,6 @@ def run_test(measurements: MeasurementSets) -> None:
     
     for ms in test_mss.getListStr():
         lilf.check_rm(ms)
-
-
-def make_beam_region(MSs: MeasurementSets) -> tuple[str, str|None]:
-    MSs.print_HAcov('plotHAelev.png')
-    MSs.getListObj()[0].makeBeamReg('beam02.reg', freq='mid', pb_cut=0.2)
-    beam02Reg = 'beam02.reg'
-    MSs.getListObj()[0].makeBeamReg('beam07.reg', freq='mid', pb_cut=0.7)
-    beam07reg = 'beam07.reg'
-
-    region = f'{parset_dir}/regions/{TARGET}.reg'
-    if not os.path.exists(region): 
-        region = None
-         
-    return beam02Reg, region
 
 def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
     cal_dir = pipeline.get_cal_dir(timestamp, logger = Logger)[0]
@@ -453,21 +436,85 @@ def main(args: argparse.Namespace) -> None:
                         
                     if calibration.doamp and doslow: # or (total_cycles - cycle <= 1):
                         calibration.solve_gain('fulljones')
-                    
 
             #if stations == "all":
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 calibration.clean(imagename)
-                
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
-                if stopping: 
-                    break 
+                
+            if stopping or cycle == calibration.stop:
+                Logger.info("Start Peeling")
+                
+                #copy data to prevent overwriting
+                lilf.check_rm("*.MS-peel")
+                Logger.info("copying data to -> *-peel...")
+                for measurement in calibration.mss.getListStr():
+                    os.system('cp -r %s %s' % (measurement, measurement + "-peel") )
+                    
+                peel_mss = MeasurementSets(
+                    glob.glob(f'*.MS-peel'), 
+                    SCHEDULE, 
+                    check_flags=False, 
+                    check_sun=True
+                )    
+                
+                pipeline.peel(peel_mss, calibration.s, calibration.mask)
+                
+                break
                    
         if stations == "all":            
             pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
+            np.savetxt(
+                'rms_noise_history.csv', 
+                calibration.rms_history, 
+                delimiter=",", 
+                header="rms noise after every calibration cycle (Jy/beam)"
+            )
+            np.savetxt(
+                'mm_ratio_noise_history.csv', 
+                calibration.ratio_history, 
+                delimiter=",", 
+                header="mm ratio  after every calibration cycle"
+            )
                            
     Logger.info("Done.")
+    
+def do_peel():
+    #copy data to prevent overwriting
+    with WALKER.if_todo("clean-peel"):
+        MSs = MeasurementSets(
+        glob.glob(f'*concat_all.MS-phaseup'), 
+        SCHEDULE, 
+        check_flags=False, 
+        check_sun=True
+        )
+        
+        lilf.check_rm("*.MS*peel")
+        Logger.info("copying data to -> *-peel...")
+        for measurement in MSs.getListStr():
+            os.system('cp -r %s %s' % (measurement, measurement + "-peel") )
+        
+    peel_mss = MeasurementSets(
+        glob.glob(f'*.MS*peel'), 
+        SCHEDULE, 
+        check_flags=False, 
+        check_sun=True
+    )    
+    
+    mask = pipeline.make_beam_region(peel_mss, TARGET)
+    pipeline.peel(peel_mss, SCHEDULE, mask)
+    
+    
+    with WALKER.if_todo('clean-after-peel'):
+        peel_mss.run(
+            'taql "update $pathMS set CORRECTED_DATA = DATA"',
+            log="$nameMS_taql.log",
+            commandType="general",
+        )
+        
+        cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
+        cal.clean(f'img/img-after-peeling')
 
 
 if __name__ == "__main__":
@@ -493,5 +540,6 @@ if __name__ == "__main__":
         os.makedirs(DATA_DIR+"/data")
         os.system(f"mv {DATA_DIR}/*.MS {DATA_DIR}/data/")
     
-    main(args)        
+    #main(args)  
+    do_peel()      
     
