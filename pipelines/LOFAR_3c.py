@@ -444,36 +444,21 @@ def main(args: argparse.Namespace) -> None:
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 
             if stopping or cycle == calibration.stop:
-                Logger.info("Start Peeling")
-                
-                #copy data to prevent overwriting
-                lilf.check_rm("*.MS-peel")
-                Logger.info("copying data to -> *-peel...")
-                for measurement in calibration.mss.getListStr():
-                    os.system('cp -r %s %s' % (measurement, measurement + "-peel") )
-                    
-                peel_mss = MeasurementSets(
-                    glob.glob(f'*.MS-peel'), 
-                    SCHEDULE, 
-                    check_flags=False, 
-                    check_sun=True
-                )    
-                
-                pipeline.peel(peel_mss, calibration.s, calibration.mask)
-                
+                Logger.info("Start Peeling")                
+                #pipeline.peel(peel_mss, calibration.s)
                 break
                    
         if stations == "all":            
             pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
             np.savetxt(
                 'rms_noise_history.csv', 
-                calibration.rms_history, 
+                np.asarray(calibration.rms_history), 
                 delimiter=",", 
                 header="rms noise after every calibration cycle (Jy/beam)"
             )
             np.savetxt(
                 'mm_ratio_noise_history.csv', 
-                calibration.ratio_history, 
+                np.asarray(calibration.ratio_history), 
                 delimiter=",", 
                 header="mm ratio  after every calibration cycle"
             )
@@ -481,30 +466,21 @@ def main(args: argparse.Namespace) -> None:
     Logger.info("Done.")
     
 def do_peel():
-    #copy data to prevent overwriting
-    with WALKER.if_todo("clean-peel"):
-        MSs = MeasurementSets(
+    MSs = MeasurementSets(
         glob.glob(f'*concat_all.MS-phaseup'), 
         SCHEDULE, 
         check_flags=False, 
         check_sun=True
         )
-        
-        lilf.check_rm("*.MS*peel")
-        Logger.info("copying data to -> *-peel...")
-        for measurement in MSs.getListStr():
-            os.system('cp -r %s %s' % (measurement, measurement + "-peel") )
-        
+    
+    pipeline.peel(MSs, SCHEDULE)
+    
     peel_mss = MeasurementSets(
         glob.glob(f'*.MS*peel'), 
         SCHEDULE, 
         check_flags=False, 
         check_sun=True
     )    
-    
-    mask = pipeline.make_beam_region(peel_mss, TARGET)
-    pipeline.peel(peel_mss, SCHEDULE, mask)
-    
     
     with WALKER.if_todo('clean-after-peel'):
         peel_mss.run(
@@ -513,6 +489,7 @@ def do_peel():
             commandType="general",
         )
         
+        mask = pipeline.make_beam_region(MSs, TARGET)
         cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
         cal.clean(f'img/img-after-peeling')
 
@@ -540,6 +517,6 @@ if __name__ == "__main__":
         os.makedirs(DATA_DIR+"/data")
         os.system(f"mv {DATA_DIR}/*.MS {DATA_DIR}/data/")
     
-    #main(args)  
-    do_peel()      
+    main(args)  
+    #do_peel()      
     

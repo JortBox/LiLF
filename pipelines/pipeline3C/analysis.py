@@ -179,9 +179,9 @@ class Catalogue3C(object):
 
 DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
 
-def measure_flux(path: str) -> float:
+def measure_flux(path: str, region=None) -> float:
     # load skymodel
-    full_image = lilf.Image(path)
+    full_image = lilf.Image(path, userReg=region) # -MFS-image.fits
     mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
     
     full_image.makeMask(

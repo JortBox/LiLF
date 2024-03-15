@@ -34,7 +34,7 @@ class SelfCalibration(object):
             schedule: lib_util.Scheduler,
             total_cycles: int = 10, 
             doslow: bool = False, 
-            stats: str = "all"
+            stats: str = ""
         ):
         self.mss = MSs
         self.stop = total_cycles
@@ -137,7 +137,7 @@ class SelfCalibration(object):
                 cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=phase000'
                 
             self.mss.run(
-                command, log=f'$nameMS_corPH-c{self.cycle:02d}.log', commandType='DP3'
+                command, log=f'$nameMS_corGp-c{self.cycle:02d}.log', commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
 
@@ -188,7 +188,7 @@ class SelfCalibration(object):
                 
             self.mss.run(
                 command,
-                log=f'$nameMS_corAMPPHslow-c{self.cycle:02d}.log', 
+                log=f'$nameMS_corGa-c{self.cycle:02d}.log', 
                 commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
