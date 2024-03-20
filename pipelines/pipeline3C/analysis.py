@@ -14,6 +14,8 @@ from astroquery.ipac.ned import Ned
 from astropy.coordinates import SkyCoord
 from astropy.table import Table as AstroTab
 
+sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
+from LiLF_lib import lib_util
 import LiLF_lib.lib_img as lilf
 
 
@@ -36,7 +38,7 @@ class Source3C(object):
         self.diametr = diameter
         
     def set_flux(self, flux: float):
-        self.flux = flux
+        self.flux = flux * u.Jy
         
     def set_data(self, path: str):
         hdu: fits.PrimaryHDU = fits.open(path)[0] # type: ignore
@@ -177,16 +179,16 @@ class Catalogue3C(object):
 
 
 
-DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
+#DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
 
-def measure_flux(path: str, region=None) -> float:
+def measure_flux(path: str, region=None, threshold: int=9) -> float:
     # load skymodel
     full_image = lilf.Image(path, userReg=region) # -MFS-image.fits
     mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
     
     full_image.makeMask(
         mode="default",
-        threshpix=5,
+        threshpix=int(threshold),
         atrous_do=False,
         maskname=mask_ddcal,
         write_srl=True,
@@ -196,6 +198,8 @@ def measure_flux(path: str, region=None) -> float:
     cal = AstroTab.read(mask_ddcal.replace("fits", "cat.fits"), format="fits")
     cal = cal[np.where(cal["Total_flux"] > 10)]
     cal.sort(["Total_flux"], reverse=True)
+    
+    lib_util.check_rm("/".join(path.split("/")[:-1]) + "*ddcal*")
 
     return cal["Total_flux"][0]
 
@@ -256,8 +260,8 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
         a2 = -1.012 
         a3 = 0.549
         S = a0 * 10**(a1 * np.log10(57.7/150)) * 10**(a2 * np.log10(57.7/150)**2) * 10**(a3 * np.log10(57.7/150)**3)
-        print(S)
-        print(total_flux/S)
+        print("scaife flux",S)
+        print("fraction",total_flux/S)
         
     elif source.name == '3c48':
         a0 = 64.768
@@ -269,6 +273,7 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
         print("fraction",total_flux/S)
         
     if plot:
+        print("plot")
         plt.imshow(np.log10(flux.value))
         plt.contour(r)
         plt.savefig("flux.png", dpi=300)
@@ -335,9 +340,14 @@ def rename_final_images(files: list[str]):
 '''  
 
 if __name__ == "__main__":
-    target = "3c48"
-    img_path = DATA_DIR + target + "/img/"
-    #rename_final_images(glob.glob(f"{DATA_DIR}{target}/img/img-all-*"))
-        
-    #sys.exit()
+    DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
     
+    catalog = Catalogue3C(["3c48"])
+    for source in catalog:
+        #source.set_data(f"{DATA_DIR}{source.name}/img/img-clean-test-MFS-image.fits")
+        source.set_data(f"{DATA_DIR}{source.name}/ampnorm-4/img/{source.name}-img-final-MFS-image.fits")
+        #print(source.rms)
+        get_integrated_flux(source, threshold=9, plot=True)
+        source.set_flux(measure_flux(source.path, threshold=9))
+        print("PyBDSF flux:", source.flux)
+        #plot_galaxy(source, vmax=0.75*np.max(source.data.value), vmin=-5*source.rms.value)

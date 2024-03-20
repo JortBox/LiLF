@@ -99,13 +99,31 @@ def subtract_field(MSs: MeasurementSets, s: lib_util.Scheduler, region):
         fit_spectral_pol=2,
         channels_out=2,
     )
+    
+    
 
     # subtract everything
-    logger.info("Subtract model: CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA...")
+    logger.info("Subtract model: CORRECTED_DATA1 = CORRECTED_DATA - MODEL_DATA...")
     MSs.run(
-        'taql "update $pathMS set CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA"',
+        'taql "update $pathMS set CORRECTED_DATA1 = CORRECTED_DATA - MODEL_DATA"',
         log="$nameMS_taql.log",
         commandType="general",
+    )
+    
+    lib_util.run_wsclean(
+        s, 
+        f'wsclean-peel.log', 
+        MSs.getStrWsclean(), 
+        weight='briggs -0.5',
+        data_column='CORRECTED_DATA1', 
+        channels_out=2,
+        name=f'img/test-subtract-no-corrupt', 
+        scale='2.0arcsec', 
+        size=2000, 
+        niter=10000, 
+        nmiter=0,
+        no_update_model_required='', 
+        minuv_l=30 
     )
 
 

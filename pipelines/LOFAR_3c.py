@@ -415,14 +415,6 @@ def main(args: argparse.Namespace) -> None:
         
         for cycle in calibration:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
-                # Smooth DATA -> DATA
-                Logger.info('BL-based smoothing...')
-                calibration.mss.run(
-                    '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-                        -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
-                    log='$nameMS_smooth1.log', 
-                    commandType='python'
-                )
             
                 if stations == "core":
                     if cycle == 1:
@@ -492,6 +484,43 @@ def do_peel():
         mask = pipeline.make_beam_region(MSs, TARGET)
         cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
         cal.clean(f'img/img-after-peeling')
+        
+def test_clean():
+    MSs = MeasurementSets(glob.glob(f'*concat_all.MS-phaseup'), SCHEDULE)
+    
+    masking = pipeline.make_beam_region(MSs, TARGET)
+    calibration = pipeline.SelfCalibration(
+        MSs, schedule=SCHEDULE, mask=masking, stats="all"
+    )
+    
+    Logger.info('Correcting CS...')
+    fulljones_solution = sorted(glob.glob("cal-Ga*all-ampnorm.h5"))
+    solution = sorted(glob.glob("cal-Gp*all-ampnorm.h5"))
+    
+    if len(solution) != 0:
+        Logger.info(f"correction Gain-scalar of {solution[-1]}")
+        # correcting DATA -> CORRECTED_DATA
+        calibration.mss.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
+                cor.parmdb={solution[-1]} cor.correction=phase000',
+            log='$nameMS_corPH-all.log', 
+            commandType='DP3'
+        )
+    
+    if len(fulljones_solution) != 0:
+        Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
+        # correcting CORRECTED_DATA -> CORRECTED_DATA
+        calibration.mss.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
+                cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
+                cor.soltab=[amplitude000,phase000]',
+            log='$nameMS_corAMPPHslow-all.log', 
+            commandType='DP3'
+        )
+    
+    imagename = f'img/img-clean-test'
+    calibration.clean(imagename)
+    calibration.prepare_next_iter(imagename, 0, 0)
 
 
 if __name__ == "__main__":
@@ -517,6 +546,7 @@ if __name__ == "__main__":
         os.makedirs(DATA_DIR+"/data")
         os.system(f"mv {DATA_DIR}/*.MS {DATA_DIR}/data/")
     
-    main(args)  
+    main(args) 
+    #test_clean() 
     #do_peel()      
     

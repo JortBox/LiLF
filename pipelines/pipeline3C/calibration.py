@@ -319,9 +319,9 @@ class SelfCalibration(object):
                 'multiscale_scales': '0,15,30,60,120,240'
             }
         else:
-            kwargs1 = {'weight': 'briggs -0.8'}
+            kwargs1 = {'weight': 'briggs -0.6'}
             kwargs2 = {
-                'weight': 'briggs -0.8', 
+                'weight': 'briggs -0.6', 
                 'multiscale_scales': '0,10,20,40,80,160'
             }
         
@@ -382,12 +382,12 @@ class SelfCalibration(object):
             auto_mask=2., 
             local_rms='', 
             local_rms_method='rms-with-min', 
-            fits_mask=maskfits,
+            #fits_mask=maskfits,
             multiscale='', 
-            multiscale_scale_bias=0.8,
+            multiscale_scale_bias=0.6,
             join_channels='', 
             fit_spectral_pol=2, 
-            channels_out=2, #numer of frequency channels outputted
+            channels_out=2, 
             **kwargs2
         )
         
