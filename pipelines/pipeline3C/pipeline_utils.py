@@ -106,8 +106,13 @@ def stations_to_phaseup(source_angular_diameter: float, central_freq: float) -> 
         data = json.load(file)["data"]
         
     max_diameter = maximum_station_diameter(source_angular_diameter, central_freq)
+    
+    print("max_diameter", max_diameter)
+    if max_diameter < data[0]["diameter"]:
+        return ""
 
     for idx, item in enumerate(data):
+        print("data", item["diameter"], item["stations"])
         if idx == len(data) - 1:
             return item["stations"]
         

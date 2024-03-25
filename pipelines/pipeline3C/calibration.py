@@ -284,7 +284,7 @@ class SelfCalibration(object):
         else:
             im.makeMask(mode="default", threshpix=5, rmsbox=(100,27), atrous_do=True)
             
-        if (region is not None) and (self.stats == "all") and (self.doamp):
+        if (region is not None) and (self.stats == "all") and (not self.doamp):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
@@ -292,7 +292,7 @@ class SelfCalibration(object):
             logger.info("NO Manual mask used")
             
             
-    def clean(self, imagename: str, uvlambdamin: int = 30) -> None:
+    def clean(self, imagename: str, uvlambdamin: int = 30, deep: bool = False) -> None:
         # special for extended sources:
         
         if TARGET in very_extended_targets:
@@ -319,7 +319,7 @@ class SelfCalibration(object):
                 'multiscale_scales': '0,15,30,60,120,240'
             }
         else:
-            kwargs1 = {'weight': 'briggs -0.6'}
+            kwargs1 = {'weight': 'briggs -0.8'}
             kwargs2 = {
                 'weight': 'briggs -0.6', 
                 'multiscale_scales': '0,10,20,40,80,160'
@@ -358,40 +358,100 @@ class SelfCalibration(object):
             **kwargs1
         )
         
-        # Avoid new mask being made every iteration.
-        # Other work around would be using breizorro.py
-        #maskfits = 'img/img-' + self.stats + '-mask.fits'
         maskfits = imagename+'-mask.fits'
         self.apply_mask(imagename, maskfits)
-
-        logger.info('Cleaning full (cycle: '+str(self.cycle)+')...')
+        
+        if not deep:
+            logger.info('Cleaning full (cycle: '+str(self.cycle)+')...')
+            lib_util.run_wsclean(
+                self.s, 
+                'wsclean2-c%02i.log' % self.cycle, 
+                self.mss.getStrWsclean(), 
+                name=imagename,
+                do_predict=True, 
+                cont=True, 
+                parallel_gridding=4,
+                niter=1000000, 
+                no_update_model_required='',
+                minuv_l=uvlambdamin, 
+                mgain=0.4, 
+                nmiter=0,
+                auto_threshold=0.5, 
+                auto_mask=2., 
+                local_rms='', 
+                local_rms_method='rms-with-min', 
+                fits_mask=maskfits,
+                multiscale='', 
+                multiscale_scale_bias=0.8,
+                join_channels='', 
+                fit_spectral_pol=2, 
+                channels_out=2, 
+                **kwargs2
+            )
+            os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)
+        
+        else:
+            logger.info('Cleaning full (cycle: '+str(self.cycle)+')...')
+            lib_util.run_wsclean(
+                self.s, 
+                'wsclean2-c%02i.log' % self.cycle, 
+                self.mss.getStrWsclean(), 
+                name=imagename,
+                do_predict=True, 
+                cont=True, 
+                parallel_gridding=4,
+                niter=1000000, 
+                no_update_model_required='',
+                minuv_l=uvlambdamin, 
+                mgain=0.4, 
+                nmiter=0,
+                auto_threshold=0.5, 
+                auto_mask=2., 
+                local_rms='', 
+                local_rms_method='rms-with-min', 
+                #fits_mask=maskfits,
+                multiscale='', 
+                multiscale_scale_bias=0.6,
+                join_channels='', 
+                fit_spectral_pol=2, 
+                channels_out=2, 
+                **kwargs2
+            )
+            os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)            
+        
+        
+    def low_resolution_clean(self, imagename: str, uvlambdamin: int = 30, taper: float=60):
+        # Low res image
+        gaussian_taper = str(taper)+"arcsec"
+        logger.info(f'Cleaning low resoluton ({taper} arcsec)...')
         lib_util.run_wsclean(
             self.s, 
-            'wsclean2-c%02i.log' % self.cycle, 
+            'wsclean-lr.log', 
             self.mss.getStrWsclean(), 
-            name=imagename,
-            do_predict=True, 
-            cont=True, 
-            parallel_gridding=4,
+            name=imagename, 
+            save_source_list='',
+            parallel_gridding=4, 
+            size=500, 
+            scale='10arcsec', 
+            weight='briggs -0.7', 
+            taper_gaussian=gaussian_taper,
             niter=1000000, 
-            no_update_model_required='',
+            no_update_model_required='', 
             minuv_l=uvlambdamin, 
-            mgain=0.4, 
+            mgain=0.75, 
             nmiter=0,
             auto_threshold=0.5, 
-            auto_mask=2., 
-            local_rms='', 
-            local_rms_method='rms-with-min', 
-            #fits_mask=maskfits,
+            auto_mask=1, 
+            local_rms='',
             multiscale='', 
-            multiscale_scale_bias=0.6,
+            multiscale_scale_bias=0.8,
+            multiscale_scales='0,10,20,40,80,160',
             join_channels='', 
             fit_spectral_pol=2, 
-            channels_out=2, 
-            **kwargs2
+            channels_out=2
         )
-        
-        os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)
+        os.system('cat logs/wsclean-lr.log | grep "background noise"') 
+    
     
     def prepare_next_iter(self, imagename: str, rms_noise_pre: float, mm_ratio_pre: float) -> tuple[float, float, bool]:
         stopping = False

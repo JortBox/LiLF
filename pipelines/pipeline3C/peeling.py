@@ -103,9 +103,9 @@ def subtract_field(MSs: MeasurementSets, s: lib_util.Scheduler, region):
     
 
     # subtract everything
-    logger.info("Subtract model: CORRECTED_DATA1 = CORRECTED_DATA - MODEL_DATA...")
+    logger.info("Subtract model: CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA...")
     MSs.run(
-        'taql "update $pathMS set CORRECTED_DATA1 = CORRECTED_DATA - MODEL_DATA"',
+        'taql "update $pathMS set CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA"',
         log="$nameMS_taql.log",
         commandType="general",
     )
@@ -114,8 +114,8 @@ def subtract_field(MSs: MeasurementSets, s: lib_util.Scheduler, region):
         s, 
         f'wsclean-peel.log', 
         MSs.getStrWsclean(), 
-        weight='briggs -0.5',
-        data_column='CORRECTED_DATA1', 
+        weight='briggs -0.8',
+        data_column='CORRECTED_DATA', 
         channels_out=2,
         name=f'img/test-subtract-no-corrupt', 
         scale='2.0arcsec', 
@@ -441,7 +441,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
         check_flags=False, 
         check_sun=True
     )  
-    
+    '''
     logger.info("Peel - Image...")
     lib_util.run_wsclean(
         s,
@@ -464,7 +464,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
         fit_spectral_pol=2,
         channels_out=2,
     )  
-        
+    '''
     # 2: Sub field + peel
     with WALKER.if_todo("sub-field"):
         subtract_field(MSs, s, region)   

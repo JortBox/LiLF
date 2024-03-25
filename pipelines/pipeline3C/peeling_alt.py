@@ -25,6 +25,33 @@ parset_dir = parset.get("LOFAR_3c_core", "parset_dir")
 
 TARGET = os.getcwd().split("/")[-1]
 
+def image_quick(measurements: MeasurementSets, imagename: str, data_column: str="CORRECTED_DATA", predict: bool=True, ):
+    logger.info(f'imaging {imagename}... ')
+    lib_util.run_wsclean(
+        SCHEDULE,
+        "wsclean-peel.log",
+        measurements.getStrWsclean(),
+        do_predict=True,
+        name=imagename,
+        data_column=data_column,
+        size=512,
+        parallel_gridding=4,
+        baseline_averaging="",
+        scale="2.5arcsec",
+        niter=100000,
+        no_update_model_required="",
+        minuv_l=30,
+        mgain=0.4,
+        nmiter=0,
+        auto_threshold=5,
+        local_rms="",
+        local_rms_method="rms-with-min",
+        join_channels="",
+        fit_spectral_pol=2,
+        channels_out=2,
+    )
+
+
 def clean_peeling(MSs):
     lib_util.check_rm("*.MS*peel")
     logger.info("copying data to -> *-peel...")
@@ -107,33 +134,10 @@ def peel_single_source(MSs_shift, peel_source, do_test: bool = False):
     name = str(peel_source["Source_id"])
     imagename_peel = "peel-%s/img_%s" % (name, name)
     
-    logger.info("Peel - Image...")
-    lib_util.run_wsclean(
-        SCHEDULE,
-        "wsclean-peel.log",
-        cal.mss.getStrWsclean(),
-        do_predict=True,
-        name=imagename_peel,
-        size=512,
-        parallel_gridding=4,
-        baseline_averaging="",
-        scale="2.5arcsec",
-        niter=100000,
-        no_update_model_required="",
-        minuv_l=30,
-        mgain=0.4,
-        nmiter=0,
-        auto_threshold=5,
-        local_rms="",
-        local_rms_method="rms-with-min",
-        join_channels="",
-        fit_spectral_pol=2,
-        channels_out=2,
-    )
+    image_quick(cal.mss, imagename_peel, data_column="DATA")
     
     # Align MODEL_DATA with source to peel
     set_model_to_peel_source(cal.mss, peel_source, imagename_peel)
-    
     
     cal.solve_gain("scalar", solint=1)
     cal.solve_gain("fulljones", solint=16)
@@ -144,30 +148,7 @@ def peel_single_source(MSs_shift, peel_source, do_test: bool = False):
     move(f'cal-Ga-c{cal.cycle:02d}-{cal.stats}-ampnorm.h5', f'peel-{name}/')
     move(f'plots-Ga-c{cal.cycle:02d}-{cal.stats}-ampnorm', f'peel-{name}/')
     
-    logger.info('Test empty... ')
-    lib_util.run_wsclean(
-        SCHEDULE,
-        "wsclean-peel.log",
-        cal.mss.getStrWsclean(),
-        do_predict=True,
-        data_column='CORRECTED_DATA', 
-        name=f'peel-{name}/test-pre-{name}',
-        size=1024,
-        parallel_gridding=4,
-        baseline_averaging="",
-        scale="2.0arcsec",
-        niter=100000,
-        no_update_model_required="",
-        minuv_l=30,
-        mgain=0.4,
-        nmiter=0,
-        auto_threshold=5,
-        local_rms="",
-        local_rms_method="rms-with-min",
-        join_channels="",
-        fit_spectral_pol=2,
-        channels_out=2,
-    )
+    image_quick(cal.mss, f'peel-{name}/test-pre-{name}')
     
     sol_suffix = f'c{cal.cycle:02d}-{cal.stats}-ampnorm'
     
@@ -191,14 +172,6 @@ def peel_single_source(MSs_shift, peel_source, do_test: bool = False):
         commandType='DP3'
     )
     
-    logger.info(f'SET SUBTRACTED_DATA1 = {cal.data_column} - MODEL_DATA ({name})')
-    cal.mss.addcol('SUBTRACTED_DATA1', cal.data_column)
-    cal.mss.run(
-        f'taql "UPDATE $pathMS SET SUBTRACTED_DATA1 = {cal.data_column} - MODEL_DATA"',
-        log='$nameMS_taql_subtract.log',
-        commandType='general'
-    )
-    
     logger.info(f'SET SUBTRACTED_DATA = {cal.data_column} - CORRUPT_MODEL_DATA ({name})')
     cal.mss.addcol('SUBTRACTED_DATA', cal.data_column)
     cal.mss.run(
@@ -217,24 +190,7 @@ def peel_single_source(MSs_shift, peel_source, do_test: bool = False):
         commandType='DP3'
     )
     '''
-    if do_test:
-        logger.info('Test empty... (SUBTRACTED_DATA)')
-        lib_util.run_wsclean(
-            SCHEDULE, 
-            f'wsclean-peel.log', 
-            cal.mss.getStrWsclean(), 
-            weight='briggs -0.5',
-            data_column='SUBTRACTED_DATA1', 
-            channels_out=3,
-            name=f'peel-{name}/test-model-{name}', 
-            scale='2.0arcsec', 
-            size=2000, 
-            niter=10000, 
-            nmiter=0,
-            no_update_model_required='', 
-            minuv_l=30 
-        )
-        
+    if do_test:        
         logger.info('Test empty... (SUBTRACTED_DATA)')
         lib_util.run_wsclean(
             SCHEDULE, 
@@ -358,7 +314,6 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
         get_field_model(MSs, region)   
         
         
-        
     table = load_sky(MSs, region)
     central_sources = table[table["dist"]<0.1]
     satellite_sources = table[table["dist"] >= 0.1]
@@ -377,15 +332,47 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
         with WALKER.if_todo("peel-%s" % name):
             set_model_to_peel_source(MSs, peel_source, IMAGENAME)
             
+            image_quick(MSs, f'peel-{name}/test-central-{name}')
+            
+            fulljones_solution = sorted(glob.glob("cal-Ga*core-ampnorm.h5"))
+            solution = sorted(glob.glob("cal-Gp*core.h5"))
+            #logger.info(f"Correction Gain of {fulljones_solution[-1]}")
+            # correcting CORRECTED_DATA -> CORRECTED_DATA
+            
+            logger.info(f'Scalarphase corruption... ({name})')
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=MODEL_DATA \
+                    msout.datacolumn=CORRUPT_MODEL_DATA cor.updateweights=False \
+                    cor.parmdb={solution[-1]} \
+                    cor.correction=phase000 cor.invert=False',
+                log=f'$nameMS_corrupt_Gp.log', 
+                commandType='DP3'
+            )
+
+            logger.info(f'Full-Jones corruption... ({name})')
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRUPT_MODEL_DATA \
+                    msout.datacolumn=CORRUPT_MODEL_DATA cor.correction=fulljones \
+                    cor.parmdb={fulljones_solution[-1]} \
+                    cor.soltab=[amplitude000,phase000] cor.invert=False', 
+                log=f'$nameMS_corrupt_Ga.log', 
+                commandType='DP3'
+            )
+            
             logger.info(
                 "Subtract model s0 (central source): \
-                    CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA..."
+                    CORRECTED_DATA = CORRECTED_DATA - CORRUPT_MODEL_DATA..."
                 )
             MSs.run(
-                'taql "update $pathMS set CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA"',
+                'taql "update $pathMS set CORRECTED_DATA = CORRECTED_DATA - CORRUPT_MODEL_DATA"',
                 log="$nameMS_taql.log",
                 commandType="general",
             )
+            
+            image_quick(MSs, f'peel-{name}/test-subtract-central-{name}')
+            
+    sys.exit()
+
       
     # cycle on sources to peel
     for i, peel_source in enumerate(satellite_sources):

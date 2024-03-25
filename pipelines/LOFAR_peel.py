@@ -77,6 +77,7 @@ def run_test(measurements: MeasurementSets) -> None:
     for ms in test_mss.getListStr():
         lilf.check_rm(ms)
 
+
 def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
     cal_dir = pipeline.get_cal_dir(timestamp, logger = Logger)[0]
     h5_pa = cal_dir + '/cal-pa.h5'
@@ -201,7 +202,6 @@ def split_stations(measurements: MeasurementSets, msout: str = "", source_angula
         commandType="DP3"
     )
     
-    
 
 def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> MeasurementSets:
     if stats == "all":
@@ -242,7 +242,6 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         try:
             source_angular_diameter = pipeline.source_angular_size(TARGET)
             baseline = pipeline.stations_to_phaseup(source_angular_diameter, central_freq=57.9)
-            print("baseline", baseline)
             stations = "{SuperStLBA:["+baseline+"]}"
             Logger.info(f"Using adaptive phase-up. Source diameter (arcmin): {source_angular_diameter}")
         except:
@@ -256,23 +255,13 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         Logger.debug('Phasing up: '+ baseline)
         lilf.check_rm(f'*{stats}.MS-phaseup')
         
-        if baseline == "":
-            MSs.run(
-                f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
-                    msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
-                    msout.datacolumn=DATA",       
-                log=f'$nameMS_phaseup.log', 
-                commandType="DP3"
-            )
-        
-        else:
-            MSs.run(
-                f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
-                    msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
-                    msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=!{baseline}",       
-                log=f'$nameMS_phaseup.log', 
-                commandType="DP3"
-            )
+        MSs.run(
+            f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
+                msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
+                msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=!{baseline}",       
+            log=f'$nameMS_phaseup.log', 
+            commandType="DP3"
+        )
         
         os.system(f'rm -r *concat_all.MS')
         os.system(f'rm -r *concat_core.MS')
@@ -359,6 +348,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
             commandType='python'
         )
 
+
 def clean_specific(mode: str) -> None :
     Logger.info('Cleaning ' + mode + ' dirs...')
     lilf.check_rm(f'cal*{mode}.h5')
@@ -369,8 +359,7 @@ def clean_specific(mode: str) -> None :
     if not os.path.exists("img/"):
         os.makedirs('img')
         
-
-    
+   
 def main(args: argparse.Namespace) -> None:
     #with WALKER.if_todo('setup'):
         #set up corected data
@@ -450,8 +439,6 @@ def main(args: argparse.Namespace) -> None:
                 Logger.info("Start Peeling")                
                 #pipeline.peel(peel_mss, calibration.s)
                 break
-        
-        
                    
         if stations == "all":            
             pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
@@ -467,21 +454,7 @@ def main(args: argparse.Namespace) -> None:
                 delimiter=",", 
                 header="mm ratio  after every calibration cycle"
             )
-            
-            # clean final data again in slightly different way to reduce noise
-            # can only be done if image is calibrated well already 
-            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-            #calibration.low_resolution_clean("img/img-low")
-    
-    # copy the calibrated measurementsets into final file 
-    MSs.run(
-        f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
-            msin.datacolumn=CORRECTED_DATA msout=$pathMS-final \
-            msout.datacolumn=DATA",       
-        log=f'$nameMS_phaseup.log', 
-        commandType="DP3"
-    )
-                          
+                           
     Logger.info("Done.")
     
 def do_peel():
@@ -573,7 +546,7 @@ if __name__ == "__main__":
         os.makedirs(DATA_DIR+"/data")
         os.system(f"mv {DATA_DIR}/*.MS {DATA_DIR}/data/")
     
-    main(args) 
+    #main(args) 
     #test_clean() 
-    #do_peel()      
+    do_peel()      
     
