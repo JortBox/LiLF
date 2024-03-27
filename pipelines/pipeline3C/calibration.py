@@ -450,7 +450,32 @@ class SelfCalibration(object):
             channels_out=2
         )
         os.system('cat logs/wsclean-lr.log | grep "background noise"') 
-    
+        
+    def empty_clean(self, imagename: str, uvlambdamin: int = 30):
+        kwargs1 = {'weight': 'briggs -0.8', "size": 2500, "scale": "2.0arcsec"} # type: ignore
+        
+        logger.info('Cleaning shallow (cycle: '+str(self.cycle)+')...')
+        lib_util.run_wsclean(
+            self.s, 
+            'wsclean-empty-c%02i.log' % self.cycle, 
+            self.mss.getStrWsclean(), 
+            do_predict=True, 
+            name=imagename,
+            parallel_gridding=4, 
+            baseline_averaging='',
+            niter=0, 
+            no_update_model_required='', 
+            minuv_l=uvlambdamin, 
+            mgain=0.4, 
+            nmiter=0,
+            auto_threshold=5, 
+            local_rms='', 
+            local_rms_method='rms-with-min',
+            join_channels='', 
+            fit_spectral_pol=2, 
+            channels_out=2, 
+            **kwargs1
+        )
     
     def prepare_next_iter(self, imagename: str, rms_noise_pre: float, mm_ratio_pre: float) -> tuple[float, float, bool]:
         stopping = False

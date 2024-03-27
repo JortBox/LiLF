@@ -299,6 +299,14 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
         print("scaife flux",S)
         print("fraction",total_flux/S)
         
+    elif source.name == '3c196':
+        a0 = 83.084
+        a1 = -0.699
+        a2 = -0.110
+        S = a0 * 10**(a1 * np.log10(57.7/150)) * 10**(a2 * np.log10(57.7/150)**2) * u.Jy
+        print("scaife flux",S)
+        print("fraction",total_flux/S)
+        
     if plot:
         print("plot")
         plt.imshow(np.log10(flux.value))

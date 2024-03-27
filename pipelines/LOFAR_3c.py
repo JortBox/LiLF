@@ -333,21 +333,36 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
     fwhm = MSs.getListObj()[0].getFWHM(freq='min')
     radeg = phasecentre[0]
     decdeg = phasecentre[1]
-    # get model the size of the image (radius=fwhm/2)
-    os.system('wget -O tgts.skymodel "https://lcs165.lofar.eu/cgi-bin/gsmv1.cgi?coord=%f,%f&radius=%f&unit=deg"' % (radeg, decdeg, fwhm)) # ASTRON
-    lsm = lsmtool.load('tgts.skymodel')#, beamMS=MSs.getListStr()[0])
-    lsm.remove('I<0.5')
-    #lsm.write('tgts-beam.skymodel', applyBeam=True, clobber=True) #TODO Beam is still not used?
-    lsm.write('tgts.skymodel', applyBeam=False, clobber=True)
-    os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
     
-    # Predict MODEL_DATA
-    Logger.info('Predict (DP3)...')
-    MSs.run(
-        f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb}', 
-        log='$nameMS_pre.log', 
-        commandType='DP3'
-    )
+    if TARGET in ["3c196", "3c380", "3c295"]:
+        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/modelscalib-simple.skydb {sourcedb}")
+        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/modelscalib-simple.skymodel tgts.skymodel")
+        calname = MSs.getListObj()[0].getNameField()
+        
+        # Predict MODEL_DATA
+        Logger.info('Predict (DP3)...')
+        MSs.run(
+            f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb} pre.sources={calname}', 
+            log='$nameMS_pre.log', 
+            commandType='DP3'
+        )
+        
+    else:    
+        # get model the size of the image (radius=fwhm/2)
+        os.system('wget -O tgts.skymodel "https://lcs165.lofar.eu/cgi-bin/gsmv1.cgi?coord=%f,%f&radius=%f&unit=deg"' % (radeg, decdeg, fwhm)) # ASTRON
+        lsm = lsmtool.load('tgts.skymodel')#, beamMS=MSs.getListStr()[0])
+        lsm.remove('I<0.5')
+        #lsm.write('tgts-beam.skymodel', applyBeam=True, clobber=True) #TODO Beam is still not used?
+        lsm.write('tgts.skymodel', applyBeam=False, clobber=True)
+        os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
+        
+        # Predict MODEL_DATA
+        Logger.info('Predict (DP3)...')
+        MSs.run(
+            f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb}', 
+            log='$nameMS_pre.log', 
+            commandType='DP3'
+        )
     
     if doBLsmooth:
         # Smooth DATA -> DATA
@@ -440,8 +455,9 @@ def main(args: argparse.Namespace) -> None:
                     if calibration.doamp and doslow: # or (total_cycles - cycle <= 1):
                         calibration.solve_gain('fulljones')
 
-            #if stations == "all":
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
+                calibration.empty_clean("img/empty-img")
+                
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 calibration.clean(imagename)
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
