@@ -415,7 +415,7 @@ def main(args: argparse.Namespace) -> None:
             total_cycles = 4
         elif stations == "all":
             if args.total_cycles is None:
-                total_cycles = 12
+                total_cycles = 20
             else:
                 total_cycles = args.total_cycles
                 

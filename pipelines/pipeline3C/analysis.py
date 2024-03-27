@@ -21,6 +21,32 @@ import LiLF_lib.lib_img as lilf
 
 Vizier.ROW_LIMIT = -1
 
+
+class Flux(object):
+    def __init__(self, flux: Quantity, freq: Quantity = 57.7*u.MHz, error: Quantity = 0.*u.Jy, spectral_index = -1.0):
+        self.flux = flux
+        self.error = error
+        self.freq = freq
+        self.spectral_index = spectral_index
+        
+    def __str__(self):
+        return f"{self.flux} at {self.freq}"
+    
+    @property    
+    def value(self) -> Quantity:
+        return self.flux
+    
+    def to_frequency(self, target_freq: Quantity, spectral_index: float|None =  None):
+        if spectral_index is None:
+            spectral_index = self.spectral_index
+            
+        self.flux *= ((target_freq/self.freq).decompose())**spectral_index
+        self.freq = target_freq
+        #TODO: new error calc
+        return self
+    
+    
+
 class Source3C(object):
     def __init__(self, name : str):
         self.name = name
@@ -37,8 +63,8 @@ class Source3C(object):
     def set_diameter(self, diameter: float):
         self.diametr = diameter
         
-    def set_flux(self, flux: float):
-        self.flux = flux * u.Jy
+    def set_flux(self, flux: Quantity, freq = 57.7*u.MHz, error=0.*u.Jy):
+        self.flux = Flux(flux, freq=freq, error=error)
         
     def set_data(self, path: str):
         hdu: fits.PrimaryHDU = fits.open(path)[0] # type: ignore
@@ -136,7 +162,7 @@ class Catalogue3C(object):
                 else:
                     self[name].set_diameter(entry["Diam"] * u.arcsec)
                 
-                self[name].set_flux(entry["S178MHz"] * u.Jy)
+                self[name].set_flux(entry["S178MHz"] * u.Jy, freq=178*u.MHz)
                 
         
     def __query_objects_ned(self, targets: list[str]) -> None:
@@ -181,7 +207,10 @@ class Catalogue3C(object):
 
 #DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
 
-def measure_flux(path: str, region=None, threshold: int=9) -> float:
+def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> float:
+    if not use_cache:
+        lib_util.check_rm("/".join(path.split("/")[:-1]) + "/*ddcal*")
+        
     # load skymodel
     full_image = lilf.Image(path, userReg=region) # -MFS-image.fits
     mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
@@ -198,8 +227,6 @@ def measure_flux(path: str, region=None, threshold: int=9) -> float:
     cal = AstroTab.read(mask_ddcal.replace("fits", "cat.fits"), format="fits")
     cal = cal[np.where(cal["Total_flux"] > 10)]
     cal.sort(["Total_flux"], reverse=True)
-    
-    lib_util.check_rm("/".join(path.split("/")[:-1]) + "*ddcal*")
 
     return cal["Total_flux"][0]
 
@@ -278,76 +305,23 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
         plt.contour(r)
         plt.savefig("flux.png", dpi=300)
         plt.clf()
-    
-'''
-def get_total_flux(file: str, path: str = DATA_DIR, size: int = 100, threshold: float = 5, plot:bool=True):
-    size //= 2
-    hdu: fits.PrimaryHDU = fits.open(path + file)[0] # type: ignore
-    
-    nax = hdu.header["NAXIS1"]//2 # type: ignore
-    beam_area = get_beam_area(hdu)
-    u_beam = u.def_unit("beam", beam_area)
-    u_pix = u.def_unit("pixel", abs(hdu.header['CDELT1'] * hdu.header['CDELT2']) * u.deg * u.deg) # type: ignore
-    
-    rms = get_rms(hdu.data[0,0,:,:]) * u.Jy/u_beam # type: ignore
-    data: Quantity = hdu.data[0,0, nax-size:nax+size, nax-size:nax+size] * u.Jy/u_beam # type: ignore
-    
-    
-    image_center = np.asarray(data.shape)//2
-    x, y = np.meshgrid(np.arange(data.shape[0]), np.arange(data.shape[1]))
-    r = np.sqrt((x - image_center[0])**2 + (y - image_center[1])**2)
-    
-    flux = np.zeros(data.shape) * u.Jy/u_beam
-    flux[data > threshold * rms] = data[data > threshold * rms]
-    #flux[r > 11] = 0
-    
-    
-    print(rms.to(u.Jy/u_pix) * flux[flux>0].shape[0] * u_pix)
-    
-    total_flux = np.sum(flux.to(u.Jy/u_pix)) * 1. * u_pix 
-    print(f"flux: {total_flux:.2f} " )
-    
-    if plot:
-        plt.imshow(np.log10(flux.value))
-        plt.contour(r)
-        plt.savefig("flux.png", dpi=300)
-        plt.clf()
         
-    # slux scale for 3c147 (scaife et al 2012)
-    a0 = 66.738
-    a1 = -0.022
-    a2 = -1.012 
-    a3 = 0.549
-    S = a0 * 10**(a1 * np.log10(57.7/150)) * 10**(a2 * np.log10(57.7/150)**2) * 10**(a3 * np.log10(57.7/150)**3)
-    print(S)
-'''  
-    
-'''   
-def rename_final_images(files: list[str]):
-    path = '/'.join(files[0].split('/')[:-1])
-    for image in reversed(files):
-        try: 
-            cycle = int(image.split('-')[-3])
-            break
-        except: 
-            print(image.split('-'), "cannot be converted to float")
-            continue
+    return total_flux.value
         
-    for file in glob.glob(f'{path}/img-all-{cycle:02d}-MFS*'):
-        suffix = file.split('-')[-1]
-        new_path = path + "/img-final-MFS-" + suffix
-        os.system(f"cp {file} {new_path}")   
-'''  
+        
+
 
 if __name__ == "__main__":
     DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
     
     catalog = Catalogue3C(["3c48"])
     for source in catalog:
+
+        
         #source.set_data(f"{DATA_DIR}{source.name}/img/img-clean-test-MFS-image.fits")
         source.set_data(f"{DATA_DIR}{source.name}/ampnorm-4/img/{source.name}-img-final-MFS-image.fits")
         #print(source.rms)
         get_integrated_flux(source, threshold=9, plot=True)
-        source.set_flux(measure_flux(source.path, threshold=9))
+        source.set_flux(measure_flux(source.path, threshold=9)*u.Jy)
         print("PyBDSF flux:", source.flux)
         #plot_galaxy(source, vmax=0.75*np.max(source.data.value), vmin=-5*source.rms.value)

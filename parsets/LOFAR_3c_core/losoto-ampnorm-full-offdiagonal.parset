@@ -1,9 +1,0 @@
-Ncpu = 0
-
-[norm]
-operation = NORM
-soltab = sol000/amplitude000
-normVal = 0.001
-axesToNorm = [time] 
-log = True
-pol = XY,YX

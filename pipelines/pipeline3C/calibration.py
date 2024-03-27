@@ -124,7 +124,7 @@ class SelfCalibration(object):
                 f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
                 [
-                    parset_dir+'/losoto-ampnorm-scalar.parset',
+                    #parset_dir+'/losoto-ampnorm-scalar.parset',
                     parset_dir+'/losoto-clip-large.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot.parset'
@@ -149,7 +149,7 @@ class SelfCalibration(object):
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=fulljones \
                     sol.h5parm=$pathMS/calGa-{self.stats}.h5  \
-                    sol.solint={solint} sol.smoothnessconstraint=2e6',
+                    sol.solint={solint}',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
@@ -171,8 +171,7 @@ class SelfCalibration(object):
                 f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
                 [
-                    parset_dir+'/losoto-ampnorm-full-diagonal.parset',
-                    parset_dir+'/losoto-ampnorm-full-offdiagonal.parset',
+                    #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                     parset_dir+'/losoto-clip.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot2d-pol.parset', 
@@ -409,7 +408,7 @@ class SelfCalibration(object):
                 auto_mask=2., 
                 local_rms='', 
                 local_rms_method='rms-with-min', 
-                #fits_mask=maskfits,
+                fits_mask=maskfits,
                 multiscale='', 
                 multiscale_scale_bias=0.6,
                 join_channels='', 
