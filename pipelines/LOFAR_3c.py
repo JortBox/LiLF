@@ -440,7 +440,7 @@ def main(args: argparse.Namespace) -> None:
         calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
         
         for cycle in calibration:
-            calibration.empty_clean(f"img/img-empty-c{cycle}")
+            #calibration.empty_clean(f"img/img-empty-c{cycle}")
             
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
             

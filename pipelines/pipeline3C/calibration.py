@@ -107,29 +107,31 @@ class SelfCalibration(object):
                 log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-            '''
-            lib_util.run_losoto(
-                self.s, 
-                f'Gp-c{self.cycle:02d}-{self.stats}', 
-                [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
-                [
-                    #parset_dir+'/losoto-clip-large.parset', 
-                    parset_dir+'/losoto-plot2d.parset', 
-                    parset_dir+'/losoto-plot.parset'
-                ]
-            )
-            '''
-            lib_util.run_losoto(
-                self.s, 
-                f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
-                [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
-                [
-                    #parset_dir+'/losoto-ampnorm-scalar.parset',
-                    parset_dir+'/losoto-clip-large.parset', 
-                    parset_dir+'/losoto-plot2d.parset', 
-                    parset_dir+'/losoto-plot.parset'
-                ]
-            )
+            
+            if self.stats == "core" and self.cycle == 1:
+                lib_util.run_losoto(
+                    self.s, 
+                    f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                    [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
+                    [
+                        #parset_dir+'/losoto-ampnorm-scalar.parset',
+                        parset_dir+'/losoto-clip-large.parset', 
+                        parset_dir+'/losoto-plot2d.parset', 
+                        parset_dir+'/losoto-plot.parset'
+                    ]
+                )
+            else:
+                lib_util.run_losoto(
+                    self.s, 
+                    f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                    [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
+                    [
+                        parset_dir+'/losoto-ampnorm-scalar.parset',
+                        parset_dir+'/losoto-clip-large.parset', 
+                        parset_dir+'/losoto-plot2d.parset', 
+                        parset_dir+'/losoto-plot.parset'
+                    ]
+                )
         
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
@@ -153,31 +155,33 @@ class SelfCalibration(object):
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-            '''
-            lib_util.run_losoto(
-                self.s, 
-                f'Ga-c{self.cycle:02d}-{self.stats}', 
-                [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
-                [
-                    #parset_dir+'/losoto-clip.parset', 
-                    parset_dir+'/losoto-plot2d.parset', 
-                    parset_dir+'/losoto-plot2d-pol.parset', 
-                    parset_dir+'/losoto-plot-pol.parset'
-                ]  
-            )
-            '''
-            lib_util.run_losoto(
-                self.s, 
-                f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
-                [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
-                [
-                    #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
-                    parset_dir+'/losoto-clip.parset', 
-                    parset_dir+'/losoto-plot2d.parset', 
-                    parset_dir+'/losoto-plot2d-pol.parset', 
-                    parset_dir+'/losoto-plot-pol.parset'
-                ]  
-            )
+            
+            if self.stats == "core" and self.cycle == 1:
+                lib_util.run_losoto(
+                    self.s, 
+                    f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                    [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
+                    [
+                        #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                        parset_dir+'/losoto-clip.parset', 
+                        parset_dir+'/losoto-plot2d.parset', 
+                        parset_dir+'/losoto-plot2d-pol.parset', 
+                        parset_dir+'/losoto-plot-pol.parset'
+                    ]  
+                )
+            else:
+                lib_util.run_losoto(
+                    self.s, 
+                    f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                    [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
+                    [
+                        parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                        parset_dir+'/losoto-clip.parset', 
+                        parset_dir+'/losoto-plot2d.parset', 
+                        parset_dir+'/losoto-plot2d-pol.parset', 
+                        parset_dir+'/losoto-plot-pol.parset'
+                    ]  
+                )
                         
             # Correct CORRECTED_DATA -> CORRECTED_DATA
             logger.info('Correction slow AMP+PH...')
@@ -203,14 +207,6 @@ class SelfCalibration(object):
         )
         
         if self.stats == "core":
-            # smooth model data?
-            #self.mss.run(
-            #    '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py \
-            #        -c 8 -n 8 -r -i MODEL_DATA -o MODEL_DATA $pathMS', 
-            #    log='$nameMS_smooth-c'+str(self.cycle)+'.log', 
-            #    commandType='python'
-            #)
-
             # solve TEC - ms:SMOOTHED_DATA (1m 2SB)
             logger.info('Solving TEC1...')
             self.mss.run(
