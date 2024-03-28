@@ -458,8 +458,7 @@ class SelfCalibration(object):
         lib_util.run_wsclean(
             self.s, 
             'wsclean-empty-c%02i.log' % self.cycle, 
-            self.mss.getStrWsclean(), 
-            do_predict=True, 
+            self.mss.getStrWsclean(),
             name=imagename,
             parallel_gridding=4, 
             baseline_averaging='',
