@@ -344,7 +344,8 @@ class SelfCalibration(object):
             parallel_gridding=4, 
             baseline_averaging='',
             niter=1000, 
-            no_update_model_required='', 
+            no_update_model_required='',
+            save_source_list='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
             nmiter=0,
@@ -372,6 +373,7 @@ class SelfCalibration(object):
                 parallel_gridding=4,
                 niter=1000000, 
                 no_update_model_required='',
+                circular_beam='',
                 minuv_l=uvlambdamin, 
                 mgain=0.4, 
                 nmiter=0,
@@ -454,7 +456,7 @@ class SelfCalibration(object):
     def empty_clean(self, imagename: str, uvlambdamin: int = 30):
         kwargs1 = {'weight': 'briggs -0.8', "size": 2500, "scale": "2.0arcsec"} # type: ignore
         
-        logger.info('Cleaning shallow (cycle: '+str(self.cycle)+')...')
+        logger.info('Cleaning empty (cycle: '+str(self.cycle)+')...')
         lib_util.run_wsclean(
             self.s, 
             'wsclean-empty-c%02i.log' % self.cycle, 
@@ -463,10 +465,10 @@ class SelfCalibration(object):
             parallel_gridding=4, 
             baseline_averaging='',
             niter=0, 
-            no_update_model_required='', 
+            no_update_model_required='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
-            nmiter=0,
+            nmiter=1,
             auto_threshold=5, 
             local_rms='', 
             local_rms_method='rms-with-min',
