@@ -335,8 +335,8 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
     decdeg = phasecentre[1]
     
     if TARGET in ["3c196", "3c380", "3c295"]:
-        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/modelscalib-simple.skydb {sourcedb}")
-        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/modelscalib-simple.skymodel tgts.skymodel")
+        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/models/calib-simple.skydb {sourcedb}")
+        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/models/calib-simple.skymodel tgts.skymodel")
         calname = MSs.getListObj()[0].getNameField()
         
         # Predict MODEL_DATA
@@ -456,7 +456,7 @@ def main(args: argparse.Namespace) -> None:
                         calibration.solve_gain('fulljones')
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
-                calibration.empty_clean("img/empty-img")
+                calibration.empty_clean(f"img/img-empty-c{cycle}")
                 
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 calibration.clean(imagename)
