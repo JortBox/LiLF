@@ -108,30 +108,18 @@ class SelfCalibration(object):
                 commandType="DP3"
             )
             
-            if self.stats == "core" and self.cycle == 1:
-                lib_util.run_losoto(
-                    self.s, 
-                    f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
-                    [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
-                    [
-                        #parset_dir+'/losoto-ampnorm-scalar.parset',
-                        parset_dir+'/losoto-clip-large.parset', 
-                        parset_dir+'/losoto-plot2d.parset', 
-                        parset_dir+'/losoto-plot.parset'
-                    ]
-                )
-            else:
-                lib_util.run_losoto(
-                    self.s, 
-                    f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
-                    [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
-                    [
-                        parset_dir+'/losoto-ampnorm-scalar.parset',
-                        parset_dir+'/losoto-clip-large.parset', 
-                        parset_dir+'/losoto-plot2d.parset', 
-                        parset_dir+'/losoto-plot.parset'
-                    ]
-                )
+
+            lib_util.run_losoto(
+                self.s, 
+                f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
+                [
+                    #parset_dir+'/losoto-ampnorm-scalar.parset',
+                    parset_dir+'/losoto-clip-large.parset', 
+                    parset_dir+'/losoto-plot2d.parset', 
+                    parset_dir+'/losoto-plot.parset'
+                ]
+            )
         
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
@@ -155,33 +143,20 @@ class SelfCalibration(object):
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-            
-            if self.stats == "core" and self.cycle == 1:
-                lib_util.run_losoto(
-                    self.s, 
-                    f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
-                    [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
-                    [
-                        #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
-                        parset_dir+'/losoto-clip.parset', 
-                        parset_dir+'/losoto-plot2d.parset', 
-                        parset_dir+'/losoto-plot2d-pol.parset', 
-                        parset_dir+'/losoto-plot-pol.parset'
-                    ]  
-                )
-            else:
-                lib_util.run_losoto(
-                    self.s, 
-                    f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
-                    [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
-                    [
-                        parset_dir+'/losoto-ampnorm-full-diagonal.parset',
-                        parset_dir+'/losoto-clip.parset', 
-                        parset_dir+'/losoto-plot2d.parset', 
-                        parset_dir+'/losoto-plot2d-pol.parset', 
-                        parset_dir+'/losoto-plot-pol.parset'
-                    ]  
-                )
+
+            lib_util.run_losoto(
+                self.s, 
+                f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
+                [
+                    #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                    parset_dir+'/losoto-clip.parset', 
+                    parset_dir+'/losoto-plot2d.parset', 
+                    parset_dir+'/losoto-plot2d-pol.parset', 
+                    parset_dir+'/losoto-plot-pol.parset'
+                ]  
+            )
+
                         
             # Correct CORRECTED_DATA -> CORRECTED_DATA
             logger.info('Correction slow AMP+PH...')

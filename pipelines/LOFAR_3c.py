@@ -443,12 +443,12 @@ def main(args: argparse.Namespace) -> None:
             #calibration.empty_clean(f"img/img-empty-c{cycle}")
             
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
-            
+                
                 if stations == "core":
-                    if cycle == 1:
-                        calibration.solve_gain('scalar')
+                #    if cycle == 1:
+                #        calibration.solve_gain('scalar')
                         
-                    calibration.solve_gain("fulljones")
+                    calibration.solve_gain("scalar")
                     
                 else:   
                     if calibration.doph:
