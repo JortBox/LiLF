@@ -418,6 +418,9 @@ def main(args: argparse.Namespace) -> None:
         # make beam region files
         masking = pipeline.make_beam_region(MSs, TARGET)
         
+        calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
+        calibration.clean(f'img/img-pre-{stations}-{cycle:02d}')
+        
         # Predict model    
         with WALKER.if_todo('predict_' + stations):  
             predict(MSs, doBLsmooth=False)
@@ -437,7 +440,7 @@ def main(args: argparse.Namespace) -> None:
         else:
             total_cycles = 10
 
-        calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
+        #calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
         
         for cycle in calibration:
             #calibration.empty_clean(f"img/img-empty-c{cycle}")
@@ -445,10 +448,10 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
-                #    if cycle == 1:
-                #        calibration.solve_gain('scalar')
+                    if cycle == 1:
+                        calibration.solve_gain('scalar')
                         
-                    calibration.solve_gain("scalar")
+                    calibration.solve_gain("fulljones")
                     
                 else:   
                     if calibration.doph:
