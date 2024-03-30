@@ -435,6 +435,8 @@ def main(args: argparse.Namespace) -> None:
         # Predict model    
         with WALKER.if_todo('predict_' + stations):  
             predict(MSs, doBLsmooth=False)
+            
+        calibration.clean(f'img/img-post-{stations}')
         
         rms_noise_pre = np.inf
         mm_ratio_pre = 0
