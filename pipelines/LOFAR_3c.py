@@ -430,7 +430,7 @@ def main(args: argparse.Namespace) -> None:
             total_cycles = 10
         
         calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
-        calibration.clean(f'img/img-pre-{stations}-{cycle:02d}')
+        calibration.clean(f'img/img-pre-{stations}')
         
         # Predict model    
         with WALKER.if_todo('predict_' + stations):  
