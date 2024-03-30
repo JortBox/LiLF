@@ -418,6 +418,17 @@ def main(args: argparse.Namespace) -> None:
         # make beam region files
         masking = pipeline.make_beam_region(MSs, TARGET)
         
+        if stations == "core":
+            total_cycles = 4
+        elif stations == "all":
+            if args.total_cycles is None:
+                total_cycles = 20
+            else:
+                total_cycles = args.total_cycles
+                
+        else:
+            total_cycles = 10
+        
         calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
         calibration.clean(f'img/img-pre-{stations}-{cycle:02d}')
         
