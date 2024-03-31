@@ -429,14 +429,9 @@ def main(args: argparse.Namespace) -> None:
         else:
             total_cycles = 10
         
-        calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
-        calibration.clean(f'img/img-pre-{stations}')
-        
         # Predict model    
-        with WALKER.if_todo('predict_' + stations):  
-            predict(MSs, doBLsmooth=False)
-            
-        calibration.clean(f'img/img-post-{stations}')
+        #with WALKER.if_todo('predict_' + stations):  
+        #    predict(MSs, doBLsmooth=False)
         
         rms_noise_pre = np.inf
         mm_ratio_pre = 0
@@ -453,7 +448,7 @@ def main(args: argparse.Namespace) -> None:
         else:
             total_cycles = 10
 
-        #calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
+        calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
         
         for cycle in calibration:
             #calibration.empty_clean(f"img/img-empty-c{cycle}")
