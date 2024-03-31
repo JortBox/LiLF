@@ -430,8 +430,8 @@ def main(args: argparse.Namespace) -> None:
             total_cycles = 10
         
         # Predict model    
-        #with WALKER.if_todo('predict_' + stations):  
-        #    predict(MSs, doBLsmooth=False)
+        with WALKER.if_todo('predict_' + stations):  
+            predict(MSs, doBLsmooth=False)
         
         rms_noise_pre = np.inf
         mm_ratio_pre = 0
