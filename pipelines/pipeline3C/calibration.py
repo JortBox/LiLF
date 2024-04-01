@@ -316,6 +316,7 @@ class SelfCalibration(object):
             baseline_averaging='',
             niter=1000, 
             no_update_model_required='',
+            circular_beam='',
             save_source_list='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
