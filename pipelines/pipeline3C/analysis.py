@@ -15,8 +15,8 @@ from astropy.coordinates import SkyCoord
 from astropy.table import Table as AstroTab
 
 sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
-from LiLF_lib import lib_util
-import LiLF_lib.lib_img as lilf
+#from LiLF_lib import lib_util
+#import LiLF_lib.lib_img as lilf
 
 
 Vizier.ROW_LIMIT = -1
@@ -29,12 +29,8 @@ class Flux(object):
         self.freq = freq
         self.spectral_index = spectral_index
         
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.flux} at {self.freq}"
-    
-    @property    
-    def value(self) -> Quantity:
-        return self.flux
     
     def to_frequency(self, target_freq: Quantity, spectral_index: float|None =  None):
         if spectral_index is None:
@@ -45,12 +41,56 @@ class Flux(object):
         #TODO: new error calc
         return self
     
+class SED(object):
+    def __init__(self, target: str = "NA"):
+        self.fluxes: list[Flux] = list()
+        self.fluxes_dict = dict()
+        self.target = target
+    
+    def __getitem__(self, item: str | int) -> Flux:
+        if type(item) == str:
+            index = self.fluxes_dict[item]
+            return self.fluxes[index]
+        elif type(item) == int or type(item) == slice:
+            return self.fluxes[item]
+        else:
+            raise IndexError
+        
+    def __str__(self) -> str:
+        string_to_print = f"SED ({self.target}): \n"
+        for flux in self.fluxes:
+            string_to_print += f"{flux.flux} at {flux.freq} \n"
+        return string_to_print
+        
+        
+    def __len__(self) -> int:
+        return len(self.fluxes)
+        
+    def insert(self, *args, **kwargs):
+        new = Flux(*args, **kwargs)
+        self.fluxes.append(new)
+        self.fluxes_dict.update({f"{int(np.round(new.freq.value))}{new.freq.unit}": len(self)-1})
+    
+    @property 
+    def flux(self):
+        return np.asarray([flux.flux.to(u.Jy).value for flux in self.fluxes]) * u.Jy
+    
+    @property
+    def freq(self):
+        return np.asarray([flux.freq.to(u.MHz).value for flux in self.fluxes]) * u.MHz
+    
+    @property
+    def error(self):
+        return np.asarray([flux.error.to(u.Jy).value for flux in self.fluxes]) * u.Jy
+    
+    
     
 
 class Source3C(object):
     def __init__(self, name : str):
         self.name = name
         self.z = 0
+        self.SED = SED(name)
         self._default_rms = False
         self.data_set = False
         
@@ -61,10 +101,11 @@ class Source3C(object):
         self.coord = coord
         
     def set_diameter(self, diameter: float):
-        self.diametr = diameter
-        
-    def set_flux(self, flux: Quantity, freq = 57.7*u.MHz, error=0.*u.Jy):
-        self.flux = Flux(flux, freq=freq, error=error)
+        self.diameter = diameter
+    
+    #@DeprecationWarning    
+    #def add_flux(self, *args):
+    #    self.SED.insert(Flux(*args))
         
     def set_data(self, path: str):
         hdu: fits.PrimaryHDU = fits.open(path)[0] # type: ignore
@@ -78,6 +119,9 @@ class Source3C(object):
         self.header = hdu.header
         self.path = path
         self.data_set = True
+        
+    def clear_data(self):
+        self.data = 0. * u.Jy/self.beam
     
     @property
     def rms(self) -> Quantity:
@@ -85,10 +129,11 @@ class Source3C(object):
             return 0. * u.Jy/self.beam
         
         if not self._default_rms:
-            return get_rms(self.data.value) * u.Jy/self.beam
-        else:
+            self.rms_value = get_rms(self.data.value) * u.Jy/self.beam
             self._default_rms = True
-            return self.rms
+            return self.rms_value
+        else:
+            return self.rms_value
             
 
 
@@ -105,7 +150,7 @@ class Catalogue3C(object):
         self.__query_objects_vizier(targets)
         #self.save()
         
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.targets)
     
     def __getitem__(self, item: str | int) -> Source3C:
@@ -156,13 +201,15 @@ class Catalogue3C(object):
         
         for entry in table:
             name = "3c" + entry["_3CR"]
+            if name == "3c225":
+                name += "b"
             if name in self.targets:
                 if entry["x_Diam"] == '"':
                     self[name].set_diameter((entry["Diam"] * u.arcsec).to(u.arcmin))
                 else:
                     self[name].set_diameter(entry["Diam"] * u.arcsec)
                 
-                self[name].set_flux(entry["S178MHz"] * u.Jy, freq=178*u.MHz)
+                self[name].SED.insert(entry["S178MHz"] * u.Jy, freq=178.*u.MHz)
                 
         
     def __query_objects_ned(self, targets: list[str]) -> None:
@@ -201,12 +248,37 @@ class Catalogue3C(object):
 
 
 
-
+def query_fluxes_ned(source: Source3C):
+    table = Ned.get_table(source.name, table="photometry")
+    
+    for item in table:
+        flux = item["Flux Density"] # type: ignore
+        freq = item["Frequency"] * u.Hz # type: ignore
+        error = (item["Lower limit of uncertainty"] + item["Upper limit of uncertainty"])/2 # type: ignore
+        
+        
+        if freq < 1.e10 * u.Hz:
+            if str(error) == "--":
+                error = 0
+                
+            if item["Units"] == "milliJy": # type: ignore
+                #flux *= u.mJy
+                #error *= u.mJy
+                continue
+                
+            elif item["Units"] == "W m^-2^ Hz^-1^": # type: ignore
+                continue
+            else:
+                flux *= u.Unit(item["Units"]) # type: ignore
+                error *= u.Unit(item["Units"]) # type: ignore
+                
+            source.SED.insert(flux, freq.to(u.MHz), error)
+            
 
 
 
 #DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
-
+'''
 def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> float:
     if not use_cache:
         lib_util.check_rm("/".join(path.split("/")[:-1]) + "/*ddcal*")
@@ -229,7 +301,7 @@ def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> fl
     cal.sort(["Total_flux"], reverse=True)
 
     return cal["Total_flux"][0]
-
+'''
 def get_rms(data, niter=100, maskSup=1e-7):
     m      = data[np.abs(data)>maskSup]
     rmsold = np.std(m)
@@ -261,6 +333,13 @@ def get_beam_area(hdu: fits.PrimaryHDU):
     #pix_area = abs(hdu.header['CDELT1'] * hdu.header['CDELT2']) * u.deg * u.deg # type: ignore
     #beam2pix = beam_area / pix_area
     return 2.0 * np.pi * beammaj * beammin
+
+def get_flux_from_model(path: str, radius: int = 10):
+    model = fits.open(path)[0].data # type: ignore
+    cpix = model.shape[-1]//2
+    
+    model_cutout = model[0,0,cpix-radius:cpix+radius, cpix-radius:cpix+radius]
+    return np.sum(model_cutout)
 
 
 def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10, plot: bool = True):
@@ -320,16 +399,34 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10
 
 
 if __name__ == "__main__":
-    DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
+    DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts"
+    DATA_DIR = "/Users/jortboxelaar/Documents/PhDLocal/FITS"
     
-    catalog = Catalogue3C(["3c48"])
+    catalog = Catalogue3C(["3c196", "3c48"])
     for source in catalog:
-
+        query_fluxes_ned(source)
+        #print(source.SED.freq)
         
         #source.set_data(f"{DATA_DIR}{source.name}/img/img-clean-test-MFS-image.fits")
-        source.set_data(f"{DATA_DIR}{source.name}/ampnorm-4/img/{source.name}-img-final-MFS-image.fits")
+        
+        #source.set_data("/Users/jortboxelaar/Documents/PhDLocal/FITS/3c196/img/img-core-01-MFS-image.fits")
+        #for i in range(1,5):
+        
+            
+        plt.errorbar(source.SED.freq, source.SED.flux, yerr=source.SED.error, fmt=".", alpha=0.4, color='black')
+        
+        source.SED.insert(get_flux_from_model(f"{DATA_DIR}/3c196/img/img-core-01-MFS-model.fits") * u.Jy)
+        plt.errorbar(source.SED["58MHz"].freq, source.SED["58MHz"].flux, yerr=0.2*source.SED["58MHz"].flux, fmt=".", alpha=0.4, color='red')
+        plt.semilogy()
+        plt.semilogx()
+        plt.show()
+        #source.SED.insert(measure_flux(source.path, threshold=9)*u.Jy)
+        #source.SED.insert(get_integrated_flux(source, threshold=9, plot=False)*u.Jy)
         #print(source.rms)
-        get_integrated_flux(source, threshold=9, plot=True)
-        source.set_flux(measure_flux(source.path, threshold=9)*u.Jy)
-        print("PyBDSF flux:", source.flux)
+        #source.clear_data()
+        #get_integrated_flux(source, threshold=9, plot=True)
+        
+        #print(source.SED)
+        #print(source.SED["178MHz"])
         #plot_galaxy(source, vmax=0.75*np.max(source.data.value), vmin=-5*source.rms.value)
+        

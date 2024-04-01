@@ -418,17 +418,6 @@ def main(args: argparse.Namespace) -> None:
         # make beam region files
         masking = pipeline.make_beam_region(MSs, TARGET)
         
-        if stations == "core":
-            total_cycles = 4
-        elif stations == "all":
-            if args.total_cycles is None:
-                total_cycles = 20
-            else:
-                total_cycles = args.total_cycles
-                
-        else:
-            total_cycles = 10
-        
         # Predict model    
         with WALKER.if_todo('predict_' + stations):  
             predict(MSs, doBLsmooth=False)
@@ -469,7 +458,7 @@ def main(args: argparse.Namespace) -> None:
                         calibration.solve_gain('fulljones')
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
-                calibration.empty_clean(f"img/img-empty-c{cycle}")
+                #calibration.empty_clean(f"img/img-empty-c{cycle}")
                 
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 calibration.clean(imagename)
@@ -499,7 +488,7 @@ def main(args: argparse.Namespace) -> None:
             
             # clean final data again in slightly different way to reduce noise
             # can only be done if image is calibrated well already 
-            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
+            #calibration.clean(f"img/{TARGET}-img-deep", deep=True)
             #calibration.low_resolution_clean("img/img-low")
     
     # copy the calibrated measurementsets into final file 
