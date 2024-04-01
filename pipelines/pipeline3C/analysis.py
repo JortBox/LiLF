@@ -21,6 +21,25 @@ sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
 
 Vizier.ROW_LIMIT = -1
 
+def indices_to_slices(input):
+    iteration = iter(input)
+    start = next(iteration)
+    slices = []
+    for i, x in enumerate(iteration):
+        if x - input[i] != 1:
+            end = input[i]
+            if start == end:
+                slices.append([start])
+            else:
+                slices.append([start, end])
+            start = x
+    if input[-1] == start:
+        slices.append([start])
+    else:
+        slices.append([start, input[-1]])
+        
+    return slices
+
 
 class Flux(object):
     def __init__(self, flux: Quantity, freq: Quantity = 57.7*u.MHz, error: Quantity = 0.*u.Jy, spectral_index = -1.0):
@@ -47,10 +66,18 @@ class SED(object):
         self.fluxes_dict = dict()
         self.target = target
     
-    def __getitem__(self, item: str | int) -> Flux:
+    def __getitem__(self, item: str | int) -> Flux|list[Flux]:
         if type(item) == str:
             index = self.fluxes_dict[item]
-            return self.fluxes[index]
+            if type(index) is int:
+                return self.fluxes[index]
+            else:
+                return self.fluxes[index[-1]]
+                #fluxes_to_return = list()
+                #for i in index:
+                #    fluxes_to_return.append(self.fluxes[i])
+                #return fluxes_to_return
+            
         elif type(item) == int or type(item) == slice:
             return self.fluxes[item]
         else:
@@ -67,9 +94,21 @@ class SED(object):
         return len(self.fluxes)
         
     def insert(self, *args, **kwargs):
-        new = Flux(*args, **kwargs)
-        self.fluxes.append(new)
-        self.fluxes_dict.update({f"{int(np.round(new.freq.value))}{new.freq.unit}": len(self)-1})
+        new_flux = Flux(*args, **kwargs)
+        new_key = f"{int(np.round(new_flux.freq.value))}{new_flux.freq.unit}"
+        if new_key in self.fluxes_dict.keys():
+            if type(self.fluxes_dict[new_key]) is list:
+                indices = self.fluxes_dict[new_key]
+            else:
+                indices = [self.fluxes_dict[new_key]]
+            
+            indices.append(len(self))
+        else:
+            indices = len(self)
+            
+
+        self.fluxes.append(new_flux)
+        self.fluxes_dict.update({new_key: indices})
     
     @property 
     def flux(self):
@@ -342,10 +381,11 @@ def get_flux_from_model(path: str, radius: int = 10):
     return np.sum(model_cutout)
 
 
-def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 10, plot: bool = True):
+def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 9, plot: bool = False):
     size //= 2
     nax = np.asarray(source.data.shape)//2 # type: ignore
     data = source.data[nax[0]-size:nax[0]+size, nax[1]-size:nax[1]+size] # type: ignore
+    
     
     image_center = np.asarray(data.shape)//2
     x, y = np.meshgrid(np.arange(data.shape[0]), np.arange(data.shape[1]))
@@ -402,9 +442,9 @@ if __name__ == "__main__":
     DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts"
     DATA_DIR = "/Users/jortboxelaar/Documents/PhDLocal/FITS"
     
-    catalog = Catalogue3C(["3c196", "3c48"])
+    catalog = Catalogue3C(["3c48"])
     for source in catalog:
-        query_fluxes_ned(source)
+        #query_fluxes_ned(source)
         #print(source.SED.freq)
         
         #source.set_data(f"{DATA_DIR}{source.name}/img/img-clean-test-MFS-image.fits")
@@ -412,14 +452,21 @@ if __name__ == "__main__":
         #source.set_data("/Users/jortboxelaar/Documents/PhDLocal/FITS/3c196/img/img-core-01-MFS-image.fits")
         #for i in range(1,5):
         
+        source.set_data(f"{DATA_DIR}/3c48/img_old/img-core-01-MFS-image.fits")
+        get_integrated_flux(source, size=50, plot=False)
+        
             
         plt.errorbar(source.SED.freq, source.SED.flux, yerr=source.SED.error, fmt=".", alpha=0.4, color='black')
-        
-        source.SED.insert(get_flux_from_model(f"{DATA_DIR}/3c196/img/img-core-01-MFS-model.fits") * u.Jy)
-        plt.errorbar(source.SED["58MHz"].freq, source.SED["58MHz"].flux, yerr=0.2*source.SED["58MHz"].flux, fmt=".", alpha=0.4, color='red')
+        for i in range(1,5):
+            source.SED.insert(get_flux_from_model(f"{DATA_DIR}/3c48/img_old/img-core-0{i}-MFS-model.fits", radius=14) * u.Jy)
+            #print(source.SED["58MHz"])
+            plt.errorbar(source.SED["58MHz"].freq, source.SED["58MHz"].flux, yerr=0.2*source.SED["58MHz"].flux, fmt=".", alpha=0.4, color='red')
         plt.semilogy()
         plt.semilogx()
         plt.show()
+        
+        #print(source.SED["58MHz"])
+        print(source.SED)
         #source.SED.insert(measure_flux(source.path, threshold=9)*u.Jy)
         #source.SED.insert(get_integrated_flux(source, threshold=9, plot=False)*u.Jy)
         #print(source.rms)
