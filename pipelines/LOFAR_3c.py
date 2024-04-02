@@ -471,10 +471,10 @@ def main(args: argparse.Namespace) -> None:
                 calibration.clean(imagename)
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 
-            if stopping or cycle == calibration.stop:
-                Logger.info("Start Peeling")                
-                #pipeline.peel(peel_mss, calibration.s)
-                break
+            #if stopping or cycle == calibration.stop:
+            #    Logger.info("Start Peeling")                
+            #    #pipeline.peel(peel_mss, calibration.s)
+            #    break
         
         
                    
