@@ -27,6 +27,7 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('-s', '--stations', dest="stations", nargs='+', type=str, default=["core", "all"])
     parser.add_argument('-c', '--cycles', dest='total_cycles', type=int, default=None)
     parser.add_argument('--do_test', dest='do_test', action='store_true', default=False)
+    parser.add_argument('--no_phaseup', dest='no_phaseup', action='store_true', default=False)
     return parser.parse_args()
 
     
@@ -207,10 +208,16 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
     if stats == "all":
         Logger.info('Correcting CS...')
         fulljones_solution = sorted(glob.glob("cal-Ga*core-ampnorm.h5"))
-        
-        """
         solution = sorted(glob.glob("cal-Gp*core.h5"))
+        final_cycle_sol = 0
+        final_cycle_fj = 0
+        
         if len(solution) != 0:
+            final_cycle_sol = int(solution[-1].split("-")[2][1:])
+        if len(fulljones_solution) != 0:
+            final_cycle_fj = int(fulljones_solution[-1].split("-")[2][1:])
+
+        if final_cycle_sol >= final_cycle_fj:
                 Logger.info(f"correction Gain-scalar of {solution[-1]}")
                 # correcting CORRECTED_DATA -> CORRECTED_DATA
                 MSs.run(
@@ -219,9 +226,9 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                     log='$nameMS_corPH-core.log', 
                     commandType='DP3'
                 )
-        """
         
-        if len(fulljones_solution) != 0:
+        
+        if final_cycle_fj >= final_cycle_sol:
             Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -256,7 +263,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         Logger.debug('Phasing up: '+ baseline)
         lilf.check_rm(f'*{stats}.MS-phaseup')
         
-        if baseline == "":
+        if baseline == "" or args.no_phaseup:
             MSs.run(
                 f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
                     msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
@@ -377,9 +384,10 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
 def clean_specific(mode: str) -> None :
     Logger.info('Cleaning ' + mode + ' dirs...')
     lilf.check_rm(f'cal*{mode}.h5')
-    lilf.check_rm(f'plots*{mode}')
+    lilf.check_rm(f'plots*{mode}-ampnorm')
     lilf.check_rm('peel*')
     lilf.check_rm(f'img/img-{mode}*')
+    lilf.check_rm(f'*.MS-phaseup-final')
     
     if not os.path.exists("img/"):
         os.makedirs('img')
@@ -433,7 +441,6 @@ def main(args: argparse.Namespace) -> None:
                 total_cycles = 20
             else:
                 total_cycles = args.total_cycles
-                
         else:
             total_cycles = 10
 
