@@ -208,7 +208,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
     if stats == "all":
         Logger.info('Correcting CS...')
         fulljones_solution = sorted(glob.glob("cal-Ga*core-ampnorm.h5"))
-        solution = sorted(glob.glob("cal-Gp*core.h5"))
+        solution = sorted(glob.glob("cal-Gp*core-ampnorm.h5"))
         final_cycle_sol = 0
         final_cycle_fj = 0
         
