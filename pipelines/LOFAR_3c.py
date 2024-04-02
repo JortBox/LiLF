@@ -383,7 +383,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
 
 def clean_specific(mode: str) -> None :
     Logger.info('Cleaning ' + mode + ' dirs...')
-    lilf.check_rm(f'cal*{mode}.h5')
+    lilf.check_rm(f'cal*{mode}-ampnorm.h5')
     lilf.check_rm(f'plots*{mode}-ampnorm')
     lilf.check_rm('peel*')
     lilf.check_rm(f'img/img-{mode}*')
