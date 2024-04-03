@@ -217,7 +217,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         if len(fulljones_solution) != 0:
             final_cycle_fj = int(fulljones_solution[-1].split("-")[2][1:])
 
-        if final_cycle_sol >= final_cycle_fj:
+        if 0 > final_cycle_sol >= final_cycle_fj:
                 Logger.info(f"correction Gain-scalar of {solution[-1]}")
                 # correcting CORRECTED_DATA -> CORRECTED_DATA
                 MSs.run(
@@ -228,7 +228,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                 )
         
         
-        if final_cycle_fj >= final_cycle_sol:
+        if 0 > final_cycle_fj >= final_cycle_sol:
             Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
