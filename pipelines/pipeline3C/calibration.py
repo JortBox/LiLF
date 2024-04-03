@@ -85,24 +85,23 @@ class SelfCalibration(object):
         else:
             solint = int(solint)
         
-        '''
-        # Smooth CORRECTED_DATA -> SMOOTHED_DATA
-        logger.info('BL-based smoothing...')
-        self.mss.run(
-            f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-                -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
-            log='$nameMS_smooth1.log', 
-            commandType='python'
-        )     
-        '''
         
         logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
         if mode == 'scalar':
+            # Smooth CORRECTED_DATA -> SMOOTHED_DATA
+            logger.info('BL-based smoothing...')
+            self.mss.run(
+                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+                    -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+                log='$nameMS_smooth1.log', 
+                commandType='python'
+            )  
+        
             # solve G - group*_TC.MS:CORRECTED_DATA
             #solint = next(self.solint_ph)
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn={self.data_column} sol.mode=scalar \
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=scalar \
                     sol.h5parm=$pathMS/calGp-{self.stats}.h5 \
                     sol.solint={solint} sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
