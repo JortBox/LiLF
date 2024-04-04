@@ -132,12 +132,21 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
+            # Smooth CORRECTED_DATA -> SMOOTHED_DATA
+            logger.info('BL-based smoothing...')
+            self.mss.run(
+                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+                    -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+                log='$nameMS_smooth1.log', 
+                commandType='python'
+            )
+            
             # solve G - group*_TC.MS:CORRECTED_DATA
             #sol.antennaconstraint=[[RS509LBA,...]] \
             #solint = next(self.solint_amp)
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn={self.data_column} sol.mode=fulljones \
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=fulljones \
                     sol.h5parm=$pathMS/calGa-{self.stats}.h5  \
                     sol.solint={solint}',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
