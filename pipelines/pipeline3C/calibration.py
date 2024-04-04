@@ -48,7 +48,7 @@ class SelfCalibration(object):
             self.solint_amp = lib_util.Sol_iterator([200,100,50,10,5])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
-            self.solint_amp = lib_util.Sol_iterator([200,100,50])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50,10])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         
         self.doslow = doslow

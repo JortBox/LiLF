@@ -248,8 +248,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
     
         try:
             source_angular_diameter = pipeline.source_angular_size(TARGET)
-            baseline = pipeline.stations_to_phaseup(source_angular_diameter, central_freq=57.9)
-            print("baseline", baseline)
+            baseline = pipeline.stations_to_phaseup(source_angular_diameter, central_freq=57.9) 
             stations = "{SuperStLBA:["+baseline+"]}"
             Logger.info(f"Using adaptive phase-up. Source diameter (arcmin): {source_angular_diameter}")
         except:
