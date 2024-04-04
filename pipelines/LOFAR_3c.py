@@ -454,7 +454,7 @@ def main(args: argparse.Namespace) -> None:
                     #if cycle == 1:
                     calibration.solve_gain('scalar')
                         
-                    #calibration.solve_gain("fulljones")
+                    calibration.solve_gain("fulljones")
                     
                 else:   
                     if calibration.doph:
