@@ -146,7 +146,7 @@ class SelfCalibration(object):
                 f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
                 [
-                    #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                    parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                     parset_dir+'/losoto-clip.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot2d-pol.parset', 

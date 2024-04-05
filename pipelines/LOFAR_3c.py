@@ -474,8 +474,9 @@ def main(args: argparse.Namespace) -> None:
             #    Logger.info("Start Peeling")                
             #    #pipeline.peel(peel_mss, calibration.s)
             #    break
-        
-        pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
+            
+        if stations == "all":
+            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
         
         np.savetxt(
             f'rms_noise_history_{stations}.csv', 
