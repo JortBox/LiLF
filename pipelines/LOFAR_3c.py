@@ -460,8 +460,8 @@ def main(args: argparse.Namespace) -> None:
                     if calibration.doph:
                         calibration.solve_gain('scalar')
                         
-                    #if calibration.doamp and doslow: # or (total_cycles - cycle <= 1):
-                    #    calibration.solve_gain('fulljones')
+                    if calibration.doamp and doslow: # or (total_cycles - cycle <= 1):
+                        calibration.solve_gain('fulljones')
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 #calibration.empty_clean(f"img/img-empty-c{cycle}")

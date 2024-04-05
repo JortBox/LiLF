@@ -48,7 +48,7 @@ class SelfCalibration(object):
             self.solint_amp = lib_util.Sol_iterator([200,100,50,25,10])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
-            self.solint_amp = lib_util.Sol_iterator([200,100,25,10])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50,25,10])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         
         self.doslow = doslow
@@ -146,7 +146,7 @@ class SelfCalibration(object):
                 f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
                 [
-                    parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                    #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                     parset_dir+'/losoto-clip.parset', 
                     parset_dir+'/losoto-plot2d.parset', 
                     parset_dir+'/losoto-plot2d-pol.parset', 
