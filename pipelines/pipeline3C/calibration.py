@@ -45,10 +45,10 @@ class SelfCalibration(object):
         self.s = schedule
         
         if stats == "core":
-            self.solint_amp = lib_util.Sol_iterator([200,100,50,10,5])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50,25,10])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
-            self.solint_amp = lib_util.Sol_iterator([200,100,50,10])
+            self.solint_amp = lib_util.Sol_iterator([200,100,25,10])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         
         self.doslow = doslow
@@ -98,7 +98,6 @@ class SelfCalibration(object):
             )  
         
             # solve G - group*_TC.MS:CORRECTED_DATA
-            #solint = next(self.solint_ph)
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalar \
@@ -108,7 +107,6 @@ class SelfCalibration(object):
                 commandType="DP3"
             )
             
-
             lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
@@ -132,21 +130,11 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
-            # Smooth CORRECTED_DATA -> SMOOTHED_DATA
-            logger.info('BL-based smoothing...')
-            self.mss.run(
-                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-                    -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
-                log='$nameMS_smooth1.log', 
-                commandType='python'
-            )
-            
             # solve G - group*_TC.MS:CORRECTED_DATA
             #sol.antennaconstraint=[[RS509LBA,...]] \
-            #solint = next(self.solint_amp)
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn=SMOOTHED_DATA sol.mode=fulljones \
+                    msin.datacolumn={self.data_column} sol.mode=fulljones \
                     sol.h5parm=$pathMS/calGa-{self.stats}.h5  \
                     sol.solint={solint}',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 

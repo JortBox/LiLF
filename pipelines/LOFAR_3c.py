@@ -475,22 +475,20 @@ def main(args: argparse.Namespace) -> None:
             #    #pipeline.peel(peel_mss, calibration.s)
             #    break
         
+        pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
         
-                   
-        if stations == "all":            
-            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
-            np.savetxt(
-                'rms_noise_history.csv', 
-                np.asarray(calibration.rms_history), 
-                delimiter=",", 
-                header="rms noise after every calibration cycle (Jy/beam)"
-            )
-            np.savetxt(
-                'mm_ratio_noise_history.csv', 
-                np.asarray(calibration.ratio_history), 
-                delimiter=",", 
-                header="mm ratio  after every calibration cycle"
-            )
+        np.savetxt(
+            f'rms_noise_history_{stations}.csv', 
+            np.asarray(calibration.rms_history), 
+            delimiter=",", 
+            header="rms noise after every calibration cycle (Jy/beam)"
+        )
+        np.savetxt(
+            f'mm_ratio_noise_history_{stations}.csv', 
+            np.asarray(calibration.ratio_history), 
+            delimiter=",", 
+            header="mm ratio  after every calibration cycle"
+        )
             
             # clean final data again in slightly different way to reduce noise
             # can only be done if image is calibrated well already 
