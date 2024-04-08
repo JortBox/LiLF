@@ -45,11 +45,11 @@ class SelfCalibration(object):
         self.s = schedule
         
         if stats == "core":
-            self.solint_amp = lib_util.Sol_iterator([200,100,50,25,10])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50,25,5])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
-            self.solint_amp = lib_util.Sol_iterator([200,100,50,25,10])
-            self.solint_ph = lib_util.Sol_iterator([10,3,1])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50])
+            self.solint_ph = lib_util.Sol_iterator([10,5])
         
         self.doslow = doslow
         self.doamp = False
@@ -84,10 +84,8 @@ class SelfCalibration(object):
                 solint = next(self.solint_amp)
         else:
             solint = int(solint)
-        
-        
-        logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
-        if mode == 'scalar':
+            
+        if mode == "scalar" or bl_smooth_fj:
             # Smooth CORRECTED_DATA -> SMOOTHED_DATA
             logger.info('BL-based smoothing...')
             self.mss.run(
@@ -95,8 +93,13 @@ class SelfCalibration(object):
                     -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
                 log='$nameMS_smooth1.log', 
                 commandType='python'
-            )  
+            )
+            data_in = "SMOOTHED_DATA"
+        else:
+            data_in = self.data_column  
         
+        logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
+        if mode == 'scalar':
             # solve G - group*_TC.MS:CORRECTED_DATA
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
@@ -107,42 +110,33 @@ class SelfCalibration(object):
                 commandType="DP3"
             )
             
+            losoto_ops = [
+                f'{parset_dir}/losoto-clip-large.parset', 
+                f'{parset_dir}/losoto-plot2d.parset', 
+                f'{parset_dir}/losoto-plot.parset'
+            ]
+            if self.stats == "all": 
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+                
             lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
-                [
-                    #parset_dir+'/losoto-ampnorm-scalar.parset',
-                    parset_dir+'/losoto-clip-large.parset', 
-                    parset_dir+'/losoto-plot2d.parset', 
-                    parset_dir+'/losoto-plot.parset'
-                ]
+                losoto_ops
             )
         
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=phase000'
-                
+                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=phase000' 
             self.mss.run(
-                command, log=f'$nameMS_corGp-c{self.cycle:02d}.log', commandType='DP3'
+                command, 
+                log=f'$nameMS_corGp-c{self.cycle:02d}.log', 
+                commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
-            if bl_smooth_fj:
-                # Smooth CORRECTED_DATA -> SMOOTHED_DATA
-                logger.info('BL-based smoothing...')
-                self.mss.run(
-                    f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-                        -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
-                    log='$nameMS_smooth1.log', 
-                    commandType='python'
-                )  
-                data_in = "SMOOTHED_DATA"
-            else:
-                data_in = self.data_column
-            
             # solve G - group*_TC.MS:CORRECTED_DATA
             #sol.antennaconstraint=[[RS509LBA,...]] \
             self.mss.run(
@@ -153,26 +147,28 @@ class SelfCalibration(object):
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
-
+            
+            losoto_ops = [
+                parset_dir+'/losoto-clip.parset', 
+                parset_dir+'/losoto-plot2d.parset', 
+                parset_dir+'/losoto-plot2d-pol.parset', 
+                parset_dir+'/losoto-plot-pol.parset'
+            ]  
+            if self.stats == "all": 
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+                
             lib_util.run_losoto(
                 self.s, 
                 f'Ga-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [ms+'/calGa-'+self.stats+'.h5' for ms in self.mss.getListStr()],
-                [
-                    #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
-                    parset_dir+'/losoto-clip.parset', 
-                    parset_dir+'/losoto-plot2d.parset', 
-                    parset_dir+'/losoto-plot2d-pol.parset', 
-                    parset_dir+'/losoto-plot-pol.parset'
-                ]  
+                losoto_ops
             )
                         
             # Correct CORRECTED_DATA -> CORRECTED_DATA
             logger.info('Correction slow AMP+PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
                 cor.parmdb=cal-Ga-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=fulljones \
-                cor.soltab=[amplitude000,phase000]'
-                
+                cor.soltab=[amplitude000,phase000]'  
             self.mss.run(
                 command,
                 log=f'$nameMS_corGa-c{self.cycle:02d}.log', 
@@ -325,7 +321,7 @@ class SelfCalibration(object):
             baseline_averaging='',
             niter=1000, 
             no_update_model_required='',
-            circular_beam='',
+            #circular_beam='',
             save_source_list='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
@@ -354,7 +350,7 @@ class SelfCalibration(object):
                 parallel_gridding=4,
                 niter=1000000, 
                 no_update_model_required='',
-                circular_beam='',
+                #circular_beam='',
                 minuv_l=uvlambdamin, 
                 mgain=0.4, 
                 nmiter=0,
@@ -383,6 +379,7 @@ class SelfCalibration(object):
                 cont=True, 
                 parallel_gridding=4,
                 niter=1000000, 
+                circular_beam='',
                 no_update_model_required='',
                 minuv_l=uvlambdamin, 
                 mgain=0.4, 

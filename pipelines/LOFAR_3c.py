@@ -159,9 +159,6 @@ def setup() -> None:
             SCHEDULE.run(check=True, maxThreads=1)                
     
             MSs = MeasurementSets([MS_concat_all], SCHEDULE)
-            #freqs = MSs.getFreqs()
-            #center_freq = freqs[len(freqs)//2]
-            #Logger.info(f"center frequency: {center_freq/1.e6}")
             
             demix(MSs)
             
@@ -487,10 +484,10 @@ def main(args: argparse.Namespace) -> None:
             header="mm ratio  after every calibration cycle"
         )
             
-            # clean final data again in slightly different way to reduce noise
-            # can only be done if image is calibrated well already 
-            #calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-            #calibration.low_resolution_clean("img/img-low")
+        # clean final data again in slightly different way to reduce noise
+        # can only be done if image is calibrated well already 
+        calibration.clean(f"img/{TARGET}-img-deep", deep=True)
+        calibration.low_resolution_clean("img/img-low")
     
     # copy the calibrated measurementsets into final file 
     try:
