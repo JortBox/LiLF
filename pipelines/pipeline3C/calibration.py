@@ -45,7 +45,7 @@ class SelfCalibration(object):
         self.s = schedule
         
         if stats == "core":
-            self.solint_amp = lib_util.Sol_iterator([200,100,50,25,5])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50,25])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
             self.solint_amp = lib_util.Sol_iterator([200,100,50])
