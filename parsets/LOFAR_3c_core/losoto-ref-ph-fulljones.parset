@@ -3,4 +3,4 @@ Ncpu = 0
 [reference]
 operation = REFERENCE
 refAnt = SuperStLBA
-soltab = sol000/phase000
+soltab = [sol000/amplitude000,sol000/phase000]

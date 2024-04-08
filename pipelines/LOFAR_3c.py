@@ -427,7 +427,7 @@ def main(args: argparse.Namespace) -> None:
         doslow = True
         
         if stations == "core":
-            total_cycles = 5
+            total_cycles = 4
         elif stations == "all":
             if args.total_cycles is None:
                 total_cycles = 20
@@ -469,7 +469,10 @@ def main(args: argparse.Namespace) -> None:
             #    break
             
         if stations == "all":
-            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)       
+            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)    
+            
+            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
+            calibration.low_resolution_clean("img/img-low")   
         
         np.savetxt(
             f'rms_noise_history_{stations}.csv', 
@@ -483,11 +486,7 @@ def main(args: argparse.Namespace) -> None:
             delimiter=",", 
             header="mm ratio  after every calibration cycle"
         )
-            
-        # clean final data again in slightly different way to reduce noise
-        # can only be done if image is calibrated well already 
-        calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-        calibration.low_resolution_clean("img/img-low")
+    
     
     # copy the calibrated measurementsets into final file 
     try:
