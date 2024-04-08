@@ -447,8 +447,8 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
-                    #if cycle == 1:
-                    calibration.solve_gain('scalar')
+                    if cycle == 1:
+                        calibration.solve_gain('scalar')
                         
                     calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj)
                     
