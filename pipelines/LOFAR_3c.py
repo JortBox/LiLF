@@ -43,15 +43,7 @@ def run_test(measurements: MeasurementSets) -> None:
         check_sun=True
     )    
     
-    predict(test_mss)
-    
-    Logger.info('BL-based smoothing...')
-    test_mss.run(
-        '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
-            -r -s 0.8 -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', 
-        log='$nameMS_smooth1.log', 
-        commandType='python'
-    )
+    predict(test_mss, doBLsmooth=True)
     
     Logger.info(f'Solving diagonal test...')
     test_mss.run(
@@ -497,13 +489,16 @@ def main(args: argparse.Namespace) -> None:
             #calibration.low_resolution_clean("img/img-low")
     
     # copy the calibrated measurementsets into final file 
-    MSs.run(
-        f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
-            msin.datacolumn=CORRECTED_DATA msout=$pathMS-final \
-            msout.datacolumn=DATA",       
-        log=f'$nameMS_phaseup.log', 
-        commandType="DP3"
-    )
+    try:
+        MSs.run(
+            f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
+                msin.datacolumn=CORRECTED_DATA msout=$pathMS-final \
+                msout.datacolumn=DATA",       
+            log=f'$nameMS_final.log', 
+            commandType="DP3"
+        )
+    except:
+        pass
                           
     Logger.info("Done.")
     
