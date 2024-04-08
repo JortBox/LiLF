@@ -28,6 +28,7 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('-c', '--cycles', dest='total_cycles', type=int, default=None)
     parser.add_argument('--do_test', dest='do_test', action='store_true', default=False)
     parser.add_argument('--no_phaseup', dest='no_phaseup', action='store_true', default=False)
+    parser.add_argument('--bl_smooth_fj', dest='bl_smooth_fj', action='store_true', default=False)
     return parser.parse_args()
 
     
@@ -449,14 +450,14 @@ def main(args: argparse.Namespace) -> None:
                     #if cycle == 1:
                     calibration.solve_gain('scalar')
                         
-                    calibration.solve_gain("fulljones")
+                    calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj)
                     
                 else:   
                     if calibration.doph:
                         calibration.solve_gain('scalar')
                         
                     if calibration.doamp and doslow: # or (total_cycles - cycle <= 1):
-                        calibration.solve_gain('fulljones')
+                        calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj)
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 #calibration.empty_clean(f"img/img-empty-c{cycle}")

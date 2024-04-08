@@ -7,3 +7,4 @@ steps = [cor, count]
 
 cor.type = correct
 cor.missingantennabehavior = unit
+#cor.updaateweights = False

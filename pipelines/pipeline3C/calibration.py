@@ -75,7 +75,7 @@ class SelfCalibration(object):
             return self.cycle
         
         
-    def solve_gain(self, mode:str, solint: int|None = None) -> None:
+    def solve_gain(self, mode:str, solint: int|None = None, bl_smooth_fj = False) -> None:
         assert mode in ["scalar", "fulljones"]
         if solint is None:
             if mode == "scalar":
@@ -130,11 +130,24 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
+            if bl_smooth_fj:
+                # Smooth CORRECTED_DATA -> SMOOTHED_DATA
+                logger.info('BL-based smoothing...')
+                self.mss.run(
+                    f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+                        -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+                    log='$nameMS_smooth1.log', 
+                    commandType='python'
+                )  
+                data_in = "SMOOTHED_DATA"
+            else:
+                data_in = self.data_column
+            
             # solve G - group*_TC.MS:CORRECTED_DATA
             #sol.antennaconstraint=[[RS509LBA,...]] \
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn={self.data_column} sol.mode=fulljones \
+                    msin.datacolumn={data_in} sol.mode=fulljones \
                     sol.h5parm=$pathMS/calGa-{self.stats}.h5  \
                     sol.solint={solint}',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
@@ -153,7 +166,6 @@ class SelfCalibration(object):
                     parset_dir+'/losoto-plot-pol.parset'
                 ]  
             )
-
                         
             # Correct CORRECTED_DATA -> CORRECTED_DATA
             logger.info('Correction slow AMP+PH...')
