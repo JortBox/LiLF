@@ -430,7 +430,7 @@ def main(args: argparse.Namespace) -> None:
         doslow = True
         
         if stations == "core":
-            total_cycles = 4
+            total_cycles = 5
         elif stations == "all":
             if args.total_cycles is None:
                 total_cycles = 20
@@ -447,7 +447,7 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
-                    if cycle == 1:
+                    if cycle <= 3:
                         calibration.solve_gain('scalar')
                         
                     calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj)
