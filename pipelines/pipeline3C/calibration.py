@@ -155,7 +155,7 @@ class SelfCalibration(object):
                 parset_dir+'/losoto-plot-pol.parset'
             ]  
             if self.stats == "all": 
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph-fulljones.parset')
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
