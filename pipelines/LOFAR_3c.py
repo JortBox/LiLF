@@ -201,6 +201,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         solution = sorted(glob.glob("cal-Gp*core-ampnorm.h5"))
         final_cycle_sol = 0
         final_cycle_fj = 0
+        data_in = "DATA"
         
         if len(solution) != 0:
             final_cycle_sol = int(solution[-1].split("-")[2][1:])
@@ -211,26 +212,28 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         print(0 > final_cycle_sol >= final_cycle_fj)
 
         if final_cycle_sol >= final_cycle_fj > 0:
-                Logger.info(f"correction Gain-scalar of {solution[-1]}")
-                # correcting CORRECTED_DATA -> CORRECTED_DATA
-                MSs.run(
-                    f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
-                        cor.parmdb={solution[-1]} cor.correction=phase000',
-                    log='$nameMS_corPH-core.log', 
-                    commandType='DP3'
-                )
+            Logger.info(f"correction Gain-scalar of {solution[-1]}")
+            # correcting CORRECTED_DATA -> CORRECTED_DATA
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
+                    cor.parmdb={solution[-1]} cor.correction=phase000',
+                log='$nameMS_corPH-core.log', 
+                commandType='DP3'
+            )
+            data_in = "CORRECTED_DATA"
         
         
         if final_cycle_fj >= final_cycle_sol > 0:
             Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
-                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
                     cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
                     cor.soltab=[amplitude000,phase000]',
                 log='$nameMS_corAMPPHslow-core.log', 
                 commandType='DP3'
             )
+            data_in = "CORRECTED_DATA"
         
   
         else:
@@ -258,7 +261,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         if baseline == "" or args.no_phaseup:
             MSs.run(
                 f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
-                    msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
+                    msin.datacolumn={data_in} msout=$pathMS-phaseup \
                     msout.datacolumn=DATA",       
                 log=f'$nameMS_phaseup.log', 
                 commandType="DP3"
@@ -267,7 +270,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         else:
             MSs.run(
                 f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
-                    msin.datacolumn=CORRECTED_DATA msout=$pathMS-phaseup \
+                    msin.datacolumn={data_in} msout=$pathMS-phaseup \
                     msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=!{baseline}",       
                 log=f'$nameMS_phaseup.log', 
                 commandType="DP3"
@@ -427,10 +430,10 @@ def main(args: argparse.Namespace) -> None:
         doslow = True
         
         if stations == "core":
-            total_cycles = 4
+            total_cycles = 3
         elif stations == "all":
             if args.total_cycles is None:
-                total_cycles = 20
+                total_cycles = 14
             else:
                 total_cycles = args.total_cycles
         else:
@@ -444,8 +447,8 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
-                    if cycle <= 3:
-                        calibration.solve_gain('scalar')
+                    #if cycle <= 3:
+                    calibration.solve_gain('scalar')
                         
                     calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj)
                     

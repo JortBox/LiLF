@@ -49,7 +49,7 @@ class SelfCalibration(object):
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
             self.solint_amp = lib_util.Sol_iterator([200,100,50])
-            self.solint_ph = lib_util.Sol_iterator([10,5])
+            self.solint_ph = lib_util.Sol_iterator([10,5,1])
         
         self.doslow = doslow
         self.doamp = False
@@ -321,7 +321,7 @@ class SelfCalibration(object):
             baseline_averaging='',
             niter=1000, 
             no_update_model_required='',
-            #circular_beam='',
+            circular_beam='',
             save_source_list='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
@@ -350,7 +350,7 @@ class SelfCalibration(object):
                 parallel_gridding=4,
                 niter=1000000, 
                 no_update_model_required='',
-                #circular_beam='',
+                circular_beam='',
                 minuv_l=uvlambdamin, 
                 mgain=0.4, 
                 nmiter=0,
