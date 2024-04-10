@@ -83,7 +83,6 @@ def smooth_baseline(in_bl, data, weights, std_t, std_f, outQueue=None):
         Weight output.
     """
     data = np.nan_to_num(data * weights) # set bad data to 0 so nans don't propagate
-    print("data shape", data.shape)
 
     if np.isnan(data).all():
         return in_bl, data, weights # flagged ants
@@ -104,11 +103,6 @@ def smooth_baseline(in_bl, data, weights, std_t, std_f, outQueue=None):
         data = dataAMP * (np.cos(dataPH) + 1j * np.sin(dataPH)) # recreate data
     else:
         dataR, dataI = np.real(data), np.imag(data)
-        print('data real', dataR.shape)
-        print('data imag', dataI.shape)
-        print(np.abs(data)[450,30])
-        print('end')
-        sys.exit()
 
         if options.onlydiag:
             if not options.notime:

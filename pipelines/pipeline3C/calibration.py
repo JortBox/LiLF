@@ -45,7 +45,7 @@ class SelfCalibration(object):
         self.s = schedule
         
         if stats == "core":
-            self.solint_amp = lib_util.Sol_iterator([200,100,50,25])
+            self.solint_amp = lib_util.Sol_iterator([200,100,50,10])
             self.solint_ph = lib_util.Sol_iterator([10,3,1])
         else:
             self.solint_amp = lib_util.Sol_iterator([200,100,50])
@@ -89,8 +89,8 @@ class SelfCalibration(object):
             # Smooth CORRECTED_DATA -> SMOOTHED_DATA
             logger.info('BL-based smoothing...')
             self.mss.run(
-                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth_pol.py\
-                    -r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py \
+                    -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
                 log='$nameMS_smooth1.log', 
                 commandType='python'
             )
@@ -115,8 +115,8 @@ class SelfCalibration(object):
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
             ]
-            if self.stats == "all": 
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            #if self.stats == "all": 
+            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
@@ -154,8 +154,8 @@ class SelfCalibration(object):
                 parset_dir+'/losoto-plot2d-pol.parset', 
                 parset_dir+'/losoto-plot-pol.parset'
             ]  
-            if self.stats == "all": 
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            #if self.stats == "all": 
+            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
