@@ -78,7 +78,7 @@ def smooth_baseline(in_bl, data, weights, std_t, std_f, outQueue=None):
     in_bl: boolean ndarray
         Mask for everything not in this baseline.
     data: ndarray.
-        Smoothed ata for one baseline.
+        Smoothed data for one baseline.
     weights: ndarray
         Weight output.
     """

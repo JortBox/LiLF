@@ -160,7 +160,8 @@ class Source3C(object):
         self.data_set = True
         
     def clear_data(self):
-        self.data = 0. * u.Jy/self.beam
+        self.data_set = False
+        del self.data
     
     @property
     def rms(self) -> Quantity:
