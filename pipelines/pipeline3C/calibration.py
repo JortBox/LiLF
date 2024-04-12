@@ -89,8 +89,8 @@ class SelfCalibration(object):
             # Smooth CORRECTED_DATA -> SMOOTHED_DATA
             logger.info('BL-based smoothing...')
             self.mss.run(
-                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py \
-                    -r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth_pol.py \
+                    -r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
                 log='$nameMS_smooth1.log', 
                 commandType='python'
             )
