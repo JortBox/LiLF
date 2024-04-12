@@ -72,11 +72,18 @@ def run_test(measurements: MeasurementSets) -> None:
         lilf.check_rm(ms)
 
 def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
-    cal_dir = pipeline.get_cal_dir(timestamp, logger = Logger)[0]
-    h5_pa = cal_dir + '/cal-pa.h5'
-    h5_amp = cal_dir + '/cal-amp.h5'
-    h5_iono = cal_dir + '/cal-iono.h5'
-    h5_fr = cal_dir + '/cal-fr.h5'
+    cal_dir = pipeline.get_cal_dir(timestamp, logger = Logger)
+    
+    using_dir = cal_dir[0]
+    for dir in cal_dir:
+        if TARGET in dir:
+            using_dir = dir
+            Logger.info(f"Using cal: {using_dir}")
+        
+    h5_pa = using_dir + '/cal-pa.h5'
+    h5_amp = using_dir + '/cal-amp.h5'
+    h5_iono = using_dir + '/cal-iono.h5'
+    h5_fr = using_dir + '/cal-fr.h5'
     assert os.path.exists(h5_pa)
     assert os.path.exists(h5_amp)
     assert os.path.exists(h5_iono)
