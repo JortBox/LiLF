@@ -4,7 +4,7 @@
 import sys, os
 import numpy as np
 
-sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
+sys.path.append("/data/scripts/LiLF")
 
 from LiLF_lib import lib_img, lib_util, lib_log
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
@@ -75,7 +75,7 @@ class SelfCalibration(object):
             return self.cycle
         
         
-    def solve_gain(self, mode:str, solint: int|None = None, bl_smooth_fj = False) -> None:
+    def solve_gain(self, mode:str, solint = None, bl_smooth_fj = False, smooth_all_pols = False) -> None:
         assert mode in ["scalar", "fulljones"]
         if solint is None:
             if mode == "scalar":
@@ -88,9 +88,13 @@ class SelfCalibration(object):
         if mode == "scalar" or bl_smooth_fj:
             # Smooth CORRECTED_DATA -> SMOOTHED_DATA
             logger.info('BL-based smoothing...')
+            if smooth_all_pols:
+                command = f'-r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
+            else:
+                command = f'-r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
+                
             self.mss.run(
-                f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth_pol.py \
-                    -r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS', 
+                f'BLsmooth_pol.py {command}', 
                 log='$nameMS_smooth1.log', 
                 commandType='python'
             )

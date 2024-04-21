@@ -7,13 +7,12 @@ import numpy as np
 import argparse
 
 #from argparse import ArgumentParser
-sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
+sys.path.append("/data/scripts/LiLF")
 
 from LiLF_lib import lib_util as lilf, lib_log
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 
 import pipeline3C as pipeline
-
 
 #TARGET = os.getcwd().split('/')[-1]
 #DATA_DIR = f'/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/{TARGET}'
@@ -22,13 +21,19 @@ def get_argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='3C-pipeline [options]')
     parser.add_argument('-t', '--target', dest="target", type=str, default=os.getcwd().split('/')[-1], 
                         help="Target name")
-    parser.add_argument('-d', '--data_dir', dest="data_dir", type=str, default="/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/", 
+    parser.add_argument('-d', '--data_dir', dest="data_dir", type=str, default="/data/data/3Csurvey/tgts/", 
                         help="Data directory excluding target name")
     parser.add_argument('-s', '--stations', dest="stations", nargs='+', type=str, default=["core", "all"])
-    parser.add_argument('-c', '--cycles', dest='total_cycles', type=int, default=None)
+    parser.add_argument('-cc', '--cycles_core', dest='total_cycles_core', type=int, default=None)
+    parser.add_argument('-ca', '--cycles_all', dest='total_cycles_all', type=int, default=None)
+    parser.add_argument('-m','--manual_mask', dest='manual_mask', action='store_true', default=False)
+    parser.add_argument('--do_core_scalar_solve', dest='do_core_scalar_solve', action='store_true', default=False)
     parser.add_argument('--do_test', dest='do_test', action='store_true', default=False)
     parser.add_argument('--no_phaseup', dest='no_phaseup', action='store_true', default=False)
     parser.add_argument('--bl_smooth_fj', dest='bl_smooth_fj', action='store_true', default=False)
+    parser.add_argument('--smooth_all_pols', dest='smooth_all_pols', action='store_true', default=False)
+    parser.add_argument('--scalar_only', dest='scalar_only', action='store_true', default=False)
+    
     return parser.parse_args()
 
     
@@ -266,12 +271,17 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         lilf.check_rm(f'*{stats}.MS-phaseup')
         
         if baseline == "" or args.no_phaseup:
-            MSs.run(
-                f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
-                    msin.datacolumn={data_in} msout=$pathMS-phaseup \
-                    msout.datacolumn=DATA",       
-                log=f'$nameMS_phaseup.log', 
-                commandType="DP3"
+            for MS in MSs.getListStr():
+                os.system(f'cp -r {MS} {MS}-phaseup')
+                
+            MSs_phaseup = MeasurementSets(
+                glob.glob(f'*concat_{stats}.MS-phaseup'), SCHEDULE
+            )
+            
+            MSs_phaseup.run(
+                'taql "update $pathMS set DATA = CORRECTED_DATA"',
+                log='$nameMS_taql.log', 
+                commandType='general'
             )
         
         else:
@@ -434,15 +444,18 @@ def main(args: argparse.Namespace) -> None:
         
         rms_noise_pre = np.inf
         mm_ratio_pre = 0
-        doslow = True
         
         if stations == "core":
-            total_cycles = 4
-        elif stations == "all":
-            if args.total_cycles is None:
+            if args.total_cycles_core is None:
                 total_cycles = 14
             else:
-                total_cycles = args.total_cycles
+                total_cycles = args.total_cycles_core
+            
+        elif stations == "all":
+            if args.total_cycles_all is None:
+                total_cycles = 14
+            else:
+                total_cycles = args.total_cycles_all
         else:
             total_cycles = 10
 
@@ -454,17 +467,20 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
-                    if cycle == 1:
-                    	calibration.solve_gain('scalar')
-                        
-                    calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj)
+                    if args.do_core_scalar_solve:
+                        calibration.solve_gain('scalar')
+                    elif cycle == 1:
+                        calibration.solve_gain('scalar')
+                    
+                    if not args.scalar_only:
+                        calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
                     
                 else:   
                     if calibration.doph:
                         calibration.solve_gain('scalar')
                         
-                    if calibration.doamp and doslow: # or (total_cycles - cycle <= 1):
-                        calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj)
+                    if calibration.doamp and not args.scalar_only: # or (total_cycles - cycle <= 1):
+                        calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 #calibration.empty_clean(f"img/img-empty-c{cycle}")

@@ -14,7 +14,7 @@ from astroquery.ipac.ned import Ned
 from astropy.coordinates import SkyCoord
 from astropy.table import Table as AstroTab
 
-sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
+sys.path.append("/data/scripts/LiLF")
 #from LiLF_lib import lib_util
 #import LiLF_lib.lib_img as lilf
 
@@ -51,7 +51,7 @@ class Flux(object):
     def __str__(self) -> str:
         return f"{self.flux} at {self.freq}"
     
-    def to_frequency(self, target_freq: Quantity, spectral_index: float|None =  None):
+    def to_frequency(self, target_freq: Quantity, spectral_index =  None):
         if spectral_index is None:
             spectral_index = self.spectral_index
             
@@ -66,7 +66,7 @@ class SED(object):
         self.fluxes_dict = dict()
         self.target = target
     
-    def __getitem__(self, item: str | int) -> Flux|list[Flux]:
+    def __getitem__(self, item):# -> Flux|list[Flux]:
         if type(item) == str:
             index = self.fluxes_dict[item]
             if type(index) is int:
@@ -193,7 +193,7 @@ class Catalogue3C(object):
     def __len__(self) -> int:
         return len(self.targets)
     
-    def __getitem__(self, item: str | int) -> Source3C:
+    def __getitem__(self, item) -> Source3C:
         if type(item) == str:
             index = self.sources_dict[item]
             return self.sources[index]
