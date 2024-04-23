@@ -448,7 +448,7 @@ def main(args: argparse.Namespace) -> None:
         
         if stations == "core":
             if args.total_cycles_core is None:
-                total_cycles = 4
+                total_cycles = 5
             else:
                 total_cycles = args.total_cycles_core
             
@@ -468,13 +468,12 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
-                    if args.do_core_scalar_solve:
-                        calibration.solve_gain('scalar')
-                    elif cycle == 1:
-                        calibration.solve_gain('scalar')
+                    if cycle == 1 or args.do_core_scalar_solve:
+                        calibration.solve_gain('phase') 
                     
-                    if not args.scalar_only:# and cycle > 1:
-                        calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
+                    if not args.scalar_only and cycle > 1:
+                        calibration.solve_gain('scalar') 
+                        #calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
                     
                 else:   
                     if calibration.doph:

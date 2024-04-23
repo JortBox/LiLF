@@ -75,7 +75,7 @@ class SelfCalibration(object):
             return self.cycle
         
     def smooth_baselines(self, mode, smooth_fj, smooth_all_pols) -> tuple[str, str]:
-        if mode == "scalar" or smooth_fj:
+        if mode != "fulljones" or smooth_fj:
             # Smooth CORRECTED_DATA -> SMOOTHED_DATA
             logger.info('BL-based smoothing...')
             if smooth_all_pols:
@@ -110,7 +110,7 @@ class SelfCalibration(object):
             
         
     def solve_gain(self, mode:str, solint = None, bl_smooth_fj = False, smooth_all_pols = False) -> None:
-        assert mode in ["scalar", "fulljones"]
+        assert mode in ["phase", "scalar", "fulljones"]
         if solint is None:
             if mode == "scalar":
                 solint = next(self.solint_ph)
@@ -121,25 +121,24 @@ class SelfCalibration(object):
             
         data_in, model_in = self.smooth_baselines(mode, bl_smooth_fj, smooth_all_pols)
         
+        logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
         if mode == 'phase':
-            # solve G - group*_TC.MS:CORRECTED_DATA
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn=SMOOTHED_DATA sol.mode=diagonalphase \
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=scalarphase \
                     sol.h5parm=$pathMS/calGph-{self.stats}.h5 \
                     sol.modeldatacolumns=[MODEL_DATA] \
-                    sol.solint={solint} sol.smoothnessconstraint=1e6',
+                    sol.solint=3 sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGph-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
             
             losoto_ops = [
-                f'{parset_dir}/losoto-clip-large.parset', 
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
             ]
-            if self.stats == "all": 
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            #if self.stats == "all": 
+            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
@@ -159,11 +158,7 @@ class SelfCalibration(object):
             )
             self.data_column = "CORRECTED_DATA"
             
-            
-        
-        logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
-        if mode == 'scalar':
-            # solve G - group*_TC.MS:CORRECTED_DATA
+        elif mode == 'scalar':
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalar \
@@ -175,6 +170,7 @@ class SelfCalibration(object):
             )
             
             losoto_ops = [
+                parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                 f'{parset_dir}/losoto-clip-large.parset', 
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
@@ -192,7 +188,7 @@ class SelfCalibration(object):
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=phase000' 
+                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=[amplitude000,phase000]' 
             self.mss.run(
                 command, 
                 log=f'$nameMS_corGp-c{self.cycle:02d}.log', 
@@ -201,8 +197,6 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
-            # solve G - group*_TC.MS:CORRECTED_DATA
-            #sol.antennaconstraint=[[RS509LBA,...]] \
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn={data_in} sol.mode=fulljones \
@@ -214,13 +208,14 @@ class SelfCalibration(object):
             )
             
             losoto_ops = [
+                parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                 parset_dir+'/losoto-clip.parset', 
                 parset_dir+'/losoto-plot2d.parset', 
                 parset_dir+'/losoto-plot2d-pol.parset', 
                 parset_dir+'/losoto-plot-pol.parset'
             ]  
-            #if self.stats == "all": 
-            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            if self.stats == "all": 
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 

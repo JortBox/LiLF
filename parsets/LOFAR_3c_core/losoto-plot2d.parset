@@ -15,6 +15,6 @@ axesInPlot = [time,freq]
 axisInTable = ant
 plotFlag = True
 prefix = plots/ph_
-refAnt = 'CS001LBA'
+refAnt = 'CS002LBA'
 #refAnt = 'CS002LBA'
 minmax = [-3.14,3.14]
