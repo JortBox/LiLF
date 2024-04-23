@@ -4,7 +4,7 @@
 import sys, os
 import numpy as np
 
-sys.path.append("/data/scripts/LiLF")
+sys.path.append("/localdata/scripts/LiLF")
 
 from LiLF_lib import lib_img, lib_util, lib_log
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
@@ -74,6 +74,40 @@ class SelfCalibration(object):
             logger.info('== Start cycle: %s ==' % self.cycle)  
             return self.cycle
         
+    def smooth_baselines(self, mode, smooth_fj, smooth_all_pols) -> tuple[str, str]:
+        if mode == "scalar" or smooth_fj:
+            # Smooth CORRECTED_DATA -> SMOOTHED_DATA
+            logger.info('BL-based smoothing...')
+            if smooth_all_pols:
+                command = f'-r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
+            else:
+                command = f'-r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
+            
+            logger.info(f'Smoothing {self.data_column} -> SMOOTHED_DATA...')
+            self.mss.run(
+                f'BLsmooth_pol.py {command}', 
+                log='$nameMS_smooth1.log', 
+                commandType='python'
+            )
+            data_in = "SMOOTHED_DATA"
+        else:
+            data_in = self.data_column
+        '''   
+        if data_in == "SMOOTHED_DATA":
+            logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
+            self.mss.run(
+                f'BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
+                log='$nameMS_smooth2.log', 
+                commandType='python'
+            ) 
+            
+            model_in = "SMOOTHED_MODEL_DATA"
+        else:
+            model_in = "MODEL_DATA" 
+        '''
+        model_in = "MODEL_DATA"
+        return data_in, model_in
+            
         
     def solve_gain(self, mode:str, solint = None, bl_smooth_fj = False, smooth_all_pols = False) -> None:
         assert mode in ["scalar", "fulljones"]
@@ -85,22 +119,47 @@ class SelfCalibration(object):
         else:
             solint = int(solint)
             
-        if mode == "scalar" or bl_smooth_fj:
-            # Smooth CORRECTED_DATA -> SMOOTHED_DATA
-            logger.info('BL-based smoothing...')
-            if smooth_all_pols:
-                command = f'-r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
-            else:
-                command = f'-r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
-                
+        data_in, model_in = self.smooth_baselines(mode, bl_smooth_fj, smooth_all_pols)
+        
+        if mode == 'phase':
+            # solve G - group*_TC.MS:CORRECTED_DATA
             self.mss.run(
-                f'BLsmooth_pol.py {command}', 
-                log='$nameMS_smooth1.log', 
-                commandType='python'
+                f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=diagonalphase \
+                    sol.h5parm=$pathMS/calGph-{self.stats}.h5 \
+                    sol.modeldatacolumns=[MODEL_DATA] \
+                    sol.solint={solint} sol.smoothnessconstraint=1e6',
+                log=f'$nameMS_solGph-c{self.cycle:02d}.log', 
+                commandType="DP3"
             )
-            data_in = "SMOOTHED_DATA"
-        else:
-            data_in = self.data_column  
+            
+            losoto_ops = [
+                f'{parset_dir}/losoto-clip-large.parset', 
+                f'{parset_dir}/losoto-plot2d.parset', 
+                f'{parset_dir}/losoto-plot.parset'
+            ]
+            if self.stats == "all": 
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+                
+            lib_util.run_losoto(
+                self.s, 
+                f'Gph-c{self.cycle:02d}-{self.stats}-ampnorm', 
+                [f'{ms}/calGph-{self.stats}.h5' for ms in self.mss.getListStr()],
+                losoto_ops
+            )
+        
+            # Correct DATA -> CORRECTED_DATA
+            logger.info('Correction PH...')
+            command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
+                cor.parmdb=cal-Gph-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=phase000' 
+            self.mss.run(
+                command, 
+                log=f'$nameMS_corGph-c{self.cycle:02d}.log', 
+                commandType='DP3'
+            )
+            self.data_column = "CORRECTED_DATA"
+            
+            
         
         logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
         if mode == 'scalar':
@@ -109,6 +168,7 @@ class SelfCalibration(object):
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalar \
                     sol.h5parm=$pathMS/calGp-{self.stats}.h5 \
+                    sol.modeldatacolumns=[MODEL_DATA] \
                     sol.solint={solint} sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
                 commandType="DP3"
@@ -119,8 +179,8 @@ class SelfCalibration(object):
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
             ]
-            #if self.stats == "all": 
-            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            if self.stats == "all": 
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
@@ -146,7 +206,8 @@ class SelfCalibration(object):
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn={data_in} sol.mode=fulljones \
-                    sol.h5parm=$pathMS/calGa-{self.stats}.h5  \
+                    sol.h5parm=$pathMS/calGa-{self.stats}.h5 \
+                    sol.modeldatacolumns=[{model_in}] \
                     sol.solint={solint}',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
@@ -327,6 +388,7 @@ class SelfCalibration(object):
             no_update_model_required='',
             #circular_beam='',
             save_source_list='',
+            apply_primary_beam='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
             nmiter=0,
@@ -356,6 +418,7 @@ class SelfCalibration(object):
                 no_update_model_required='',
                 #circular_beam='',
                 minuv_l=uvlambdamin, 
+                apply_primary_beam='',
                 mgain=0.4, 
                 nmiter=0,
                 auto_threshold=0.5, 

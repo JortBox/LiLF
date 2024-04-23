@@ -26,7 +26,7 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('-s', '--stations', dest="stations", nargs='+', type=str, default=["core", "all"])
     parser.add_argument('-cc', '--cycles_core', dest='total_cycles_core', type=int, default=None)
     parser.add_argument('-ca', '--cycles_all', dest='total_cycles_all', type=int, default=None)
-    parser.add_argument('-m','--manual_mask', dest='manual_mask', action='store_true', default=False)
+    parser.add_argument('-m', '--manual_mask', dest='manual_mask', action='store_true', default=False)
     parser.add_argument('--do_core_scalar_solve', dest='do_core_scalar_solve', action='store_true', default=False)
     parser.add_argument('--do_test', dest='do_test', action='store_true', default=False)
     parser.add_argument('--no_phaseup', dest='no_phaseup', action='store_true', default=False)
@@ -366,14 +366,15 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
             commandType='DP3'
         )
         
-    else:    
-        # get model the size of the image (radius=fwhm/2)
-        os.system('wget -O tgts.skymodel "https://lcs165.lofar.eu/cgi-bin/gsmv1.cgi?coord=%f,%f&radius=%f&unit=deg"' % (radeg, decdeg, fwhm)) # ASTRON
-        lsm = lsmtool.load('tgts.skymodel')#, beamMS=MSs.getListStr()[0])
-        lsm.remove('I<0.5')
-        #lsm.write('tgts-beam.skymodel', applyBeam=True, clobber=True) #TODO Beam is still not used?
-        lsm.write('tgts.skymodel', applyBeam=False, clobber=True)
-        os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
+    else: 
+        if not os.path.exists('tgts.skydb'):   
+            # get model the size of the image (radius=fwhm/2)
+            os.system('wget -O tgts.skymodel "https://lcs165.lofar.eu/cgi-bin/gsmv1.cgi?coord=%f,%f&radius=%f&unit=deg"' % (radeg, decdeg, fwhm)) # ASTRON
+            lsm = lsmtool.load('tgts.skymodel')#, beamMS=MSs.getListStr()[0])
+            lsm.remove('I<0.5')
+            #lsm.write('tgts-beam.skymodel', applyBeam=True, clobber=True) #TODO Beam is still not used?
+            lsm.write('tgts.skymodel', applyBeam=False, clobber=True)
+            os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
         
         # Predict MODEL_DATA
         Logger.info('Predict (DP3)...')
@@ -447,7 +448,7 @@ def main(args: argparse.Namespace) -> None:
         
         if stations == "core":
             if args.total_cycles_core is None:
-                total_cycles = 14
+                total_cycles = 4
             else:
                 total_cycles = args.total_cycles_core
             
@@ -472,14 +473,14 @@ def main(args: argparse.Namespace) -> None:
                     elif cycle == 1:
                         calibration.solve_gain('scalar')
                     
-                    if not args.scalar_only:
+                    if not args.scalar_only:# and cycle > 1:
                         calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
                     
                 else:   
                     if calibration.doph:
                         calibration.solve_gain('scalar')
                         
-                    if calibration.doamp and not args.scalar_only: # or (total_cycles - cycle <= 1):
+                    if calibration.doamp and not args.scalar_only and cycle > 1: # or (total_cycles - cycle <= 1):
                         calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
@@ -611,6 +612,8 @@ if __name__ == "__main__":
     parset_dir = parset.get('LOFAR_3c_core', 'parset_dir')
     SKYDB_DEMIX = parset.get('LOFAR_demix','demix_model')
     bl2flag = parset.get('flag', 'stations')
+    
+    Logger.info("Executing python call:" + ' '.join(sys.argv))
 
     
     if not os.path.exists(DATA_DIR+"/data"):

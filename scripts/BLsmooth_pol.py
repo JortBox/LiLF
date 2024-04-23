@@ -30,7 +30,7 @@ from scipy.ndimage import gaussian_filter1d as gfilter
 import casacore.tables as pt
 
 
-sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
+sys.path.append("/data/scripts/LiLF")
 from LiLF_lib.lib_multiproc import multiprocManager
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s: %(message)s')

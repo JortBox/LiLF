@@ -15,8 +15,8 @@ from astropy.coordinates import SkyCoord
 from astropy.table import Table as AstroTab
 
 sys.path.append("/data/scripts/LiLF")
-#from LiLF_lib import lib_util
-#import LiLF_lib.lib_img as lilf
+from LiLF_lib import lib_util
+import LiLF_lib.lib_img as lilf
 
 
 Vizier.ROW_LIMIT = -1
@@ -318,7 +318,7 @@ def query_fluxes_ned(source: Source3C):
 
 
 #DATA_DIR = "/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/"
-'''
+
 def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> float:
     if not use_cache:
         lib_util.check_rm("/".join(path.split("/")[:-1]) + "/*ddcal*")
@@ -341,7 +341,7 @@ def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> fl
     cal.sort(["Total_flux"], reverse=True)
 
     return cal["Total_flux"][0]
-'''
+
 def get_rms(data, niter=100, maskSup=1e-7):
     m      = data[np.abs(data)>maskSup]
     rmsold = np.std(m)
