@@ -469,15 +469,15 @@ def main(args: argparse.Namespace) -> None:
                 
                 if stations == "core":
                     if cycle == 1 or args.do_core_scalar_solve:
-                        calibration.solve_gain('phase') 
+                        calibration.solve_gain('phase', smooth_all_pols=args.smooth_all_pols) 
                     
                     if not args.scalar_only and cycle > 1:
-                        calibration.solve_gain('scalar') 
-                        #calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
+                        #calibration.solve_gain('scalar') 
+                        calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
                     
                 else:   
                     if calibration.doph:
-                        calibration.solve_gain('scalar')
+                        calibration.solve_gain('scalar', smooth_all_pols=args.smooth_all_pols)
                         
                     if calibration.doamp and not args.scalar_only and cycle > 1: # or (total_cycles - cycle <= 1):
                         calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)

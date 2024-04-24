@@ -85,18 +85,18 @@ class SelfCalibration(object):
             
             logger.info(f'Smoothing {self.data_column} -> SMOOTHED_DATA...')
             self.mss.run(
-                f'BLsmooth_pol.py {command}', 
+                f'/data/scripts/LiLF/scripts/BLsmooth_pol.py {command}', 
                 log='$nameMS_smooth1.log', 
                 commandType='python'
             )
             data_in = "SMOOTHED_DATA"
         else:
             data_in = self.data_column
-        '''   
+          
         if data_in == "SMOOTHED_DATA":
             logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
             self.mss.run(
-                f'BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
+                f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
                 log='$nameMS_smooth2.log', 
                 commandType='python'
             ) 
@@ -104,7 +104,7 @@ class SelfCalibration(object):
             model_in = "SMOOTHED_MODEL_DATA"
         else:
             model_in = "MODEL_DATA" 
-        '''
+        
         model_in = "MODEL_DATA"
         return data_in, model_in
             
@@ -127,8 +127,8 @@ class SelfCalibration(object):
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalarphase \
                     sol.h5parm=$pathMS/calGph-{self.stats}.h5 \
-                    sol.modeldatacolumns=[MODEL_DATA] \
-                    sol.solint=3 sol.smoothnessconstraint=1e6',
+                    sol.modeldatacolumns=[SMOOTHED_MODEL_DATA] \
+                    sol.solint=1 sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGph-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
@@ -170,7 +170,7 @@ class SelfCalibration(object):
             )
             
             losoto_ops = [
-                parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                parset_dir+'/losoto-ampnorm-scalar.parset',
                 f'{parset_dir}/losoto-clip-large.parset', 
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
@@ -188,7 +188,7 @@ class SelfCalibration(object):
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=[amplitude000,phase000]' 
+                cor.parmdb=cal-Gp-c{self.cycle:02d}-{self.stats}-ampnorm.h5 cor.correction=amplitude000' 
             self.mss.run(
                 command, 
                 log=f'$nameMS_corGp-c{self.cycle:02d}.log', 
@@ -356,7 +356,7 @@ class SelfCalibration(object):
         else:
             kwargs1 = {'weight': 'briggs -0.8'}
             kwargs2 = {
-                'weight': 'briggs -0.6', 
+                'weight': 'briggs -0.8', 
                 'multiscale_scales': '0,10,20,40,80,160'
             }
         
@@ -383,7 +383,6 @@ class SelfCalibration(object):
             no_update_model_required='',
             #circular_beam='',
             save_source_list='',
-            apply_primary_beam='',
             minuv_l=uvlambdamin, 
             mgain=0.4, 
             nmiter=0,
@@ -412,8 +411,7 @@ class SelfCalibration(object):
                 niter=1000000, 
                 no_update_model_required='',
                 #circular_beam='',
-                minuv_l=uvlambdamin, 
-                apply_primary_beam='',
+                minuv_l=uvlambdamin,
                 mgain=0.4, 
                 nmiter=0,
                 auto_threshold=0.5, 
