@@ -14,15 +14,10 @@ from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 
 import pipeline3C as pipeline
 
-#TARGET = os.getcwd().split('/')[-1]
-#DATA_DIR = f'/net/voorrijn/data2/boxelaar/data/3Csurvey/tgts/{TARGET}'
-
 def get_argparser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='3C-pipeline [options]')
-    parser.add_argument('-t', '--target', dest="target", type=str, default=os.getcwd().split('/')[-1], 
-                        help="Target name")
-    parser.add_argument('-d', '--data_dir', dest="data_dir", type=str, default="/data/data/3Csurvey/tgts/", 
-                        help="Data directory excluding target name")
+    parser.add_argument('-t', '--target', dest="target", type=str, default=os.getcwd().split('/')[-1], help="Target name")
+    parser.add_argument('-d', '--data_dir', dest="data_dir", type=str, default="/data/data/3Csurvey/tgts/", help="Data directory excluding target name")
     parser.add_argument('-s', '--stations', dest="stations", nargs='+', type=str, default=["core", "all"])
     parser.add_argument('-cc', '--cycles_core', dest='total_cycles_core', type=int, default=None)
     parser.add_argument('-ca', '--cycles_all', dest='total_cycles_all', type=int, default=None)
@@ -33,7 +28,6 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('--bl_smooth_fj', dest='bl_smooth_fj', action='store_true', default=False)
     parser.add_argument('--smooth_all_pols', dest='smooth_all_pols', action='store_true', default=False)
     parser.add_argument('--scalar_only', dest='scalar_only', action='store_true', default=False)
-    
     return parser.parse_args()
 
     
@@ -469,17 +463,16 @@ def main(args: argparse.Namespace) -> None:
                 
                 if stations == "core":
                     if cycle == 1 or args.do_core_scalar_solve:
-                        calibration.solve_gain('phase', smooth_all_pols=args.smooth_all_pols) 
+                        calibration.solve_gain('phase') 
                     
                     if not args.scalar_only and cycle > 1:
-                        #calibration.solve_gain('scalar') 
                         calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
                     
                 else:   
                     if calibration.doph:
-                        calibration.solve_gain('scalar', smooth_all_pols=args.smooth_all_pols)
+                        calibration.solve_gain('scalar')
                         
-                    if calibration.doamp and not args.scalar_only and cycle > 1: # or (total_cycles - cycle <= 1):
+                    if calibration.doamp and not args.scalar_only and cycle > 1:
                         calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
