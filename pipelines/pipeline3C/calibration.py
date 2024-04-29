@@ -78,7 +78,7 @@ class SelfCalibration(object):
         if mode == "fulljones" and not smooth_fj:
             return self.data_column, "MODEL_DATA"
         
-        if smooth_all_pols or mode in ["phase", "scalar"]:
+        if smooth_all_pols or mode in ["phase"]:
             command = f'-r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
         else:
             command = f'-r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
@@ -90,7 +90,7 @@ class SelfCalibration(object):
             commandType='python'
         )
           
-        if mode in ["phase", "scalar"]:
+        if mode in ["phase"]:
             logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
             self.mss.run(
                 f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
@@ -122,7 +122,7 @@ class SelfCalibration(object):
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalarphase \
                     sol.h5parm=$pathMS/calGph-{self.stats}.h5 \
-                    sol.modeldatacolumns=[SMOOTHED_MODEL_DATA] \
+                    sol.modeldatacolumns=[{model_in}] \
                     sol.solint={solint} sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGph-c{self.cycle:02d}.log', 
                 commandType="DP3"
@@ -158,7 +158,7 @@ class SelfCalibration(object):
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalar \
                     sol.h5parm=$pathMS/calGp-{self.stats}.h5 \
-                    sol.modeldatacolumns=[MODEL_DATA] \
+                    sol.modeldatacolumns=[{model_in}] \
                     sol.solint={solint} sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
                 commandType="DP3"
@@ -169,14 +169,25 @@ class SelfCalibration(object):
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
             ]
-            if self.stats == "all": 
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            #if self.stats == "all": 
+            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
                 f'Gp-c{self.cycle:02d}-{self.stats}-ampnorm', 
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
                 losoto_ops
+            )
+                
+            lib_util.run_losoto(
+                self.s, 
+                f'Gp-c{self.cycle:02d}-{self.stats}-reftest', 
+                [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
+                [
+                    f'{parset_dir}/losoto-clip-large.parset', 
+                    f'{parset_dir}/losoto-plot2d-remote-ref.parset', 
+                    f'{parset_dir}/losoto-plot-remote-ref.parset'
+                ]
             )
         
             # Correct DATA -> CORRECTED_DATA
@@ -202,14 +213,17 @@ class SelfCalibration(object):
             )
             
             losoto_ops = [
-                parset_dir+'/losoto-ampnorm-full-diagonal.parset',
+                #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                 parset_dir+'/losoto-clip.parset', 
                 parset_dir+'/losoto-plot2d.parset', 
                 parset_dir+'/losoto-plot2d-pol.parset', 
                 parset_dir+'/losoto-plot-pol.parset'
-            ]  
-            if self.stats == "all": 
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            ]
+            if self.stats == "core":
+                losoto_ops.insert(0, f'{parset_dir}/losoto-ampnorm-full-diagonal.parset')  
+            #if self.stats == "all": 
+            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            
                 
             lib_util.run_losoto(
                 self.s, 
@@ -311,7 +325,7 @@ class SelfCalibration(object):
         if self.stats == "core":
             im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
         else:
-            im.makeMask(mode="default", threshpix=5, rmsbox=(100,27), atrous_do=True)
+            im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
             
         if (region is not None) and (self.stats == "all") and (not self.doamp):
             logger.info("Manual masks used")
@@ -350,7 +364,7 @@ class SelfCalibration(object):
         else:
             kwargs1 = {'weight': 'briggs -0.8'}
             kwargs2 = {
-                'weight': 'briggs -0.8', 
+                'weight': 'briggs -0.6', 
                 'multiscale_scales': '0,10,20,40,80,160'
             }
         
