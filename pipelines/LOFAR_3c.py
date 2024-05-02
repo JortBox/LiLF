@@ -213,10 +213,10 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
         
         assert len(rms_history) == len(ratio_history)
-        if np.argmax(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
-            correct_cycle = -len(rms_history) - 1
+        if np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
+            correct_cycle = - 1
         else:
-            correct_cycle = np.argmax(ratio_history[1:])
+            correct_cycle = np.argmax(ratio_history) - len(ratio_history)
         
         if len(solution) != 0:
             final_cycle_sol = int(solution[-1].split("-")[2][1:])
@@ -411,6 +411,7 @@ def clean_specific(mode: str) -> None :
 
     
 def main(args: argparse.Namespace) -> None:
+    stopping=False
     #with WALKER.if_todo('setup'):
         #set up corected data
     setup() 
@@ -502,18 +503,19 @@ def main(args: argparse.Namespace) -> None:
             calibration.clean(f"img/{TARGET}-img-deep", deep=True)
             calibration.low_resolution_clean("img/img-low")   
         
-        np.savetxt(
-            f'rms_noise_history_{stations}.csv', 
-            np.asarray(calibration.rms_history), 
-            delimiter=",", 
-            header="rms noise after every calibration cycle (Jy/beam)"
-        )
-        np.savetxt(
-            f'mm_ratio_noise_history_{stations}.csv', 
-            np.asarray(calibration.ratio_history), 
-            delimiter=",", 
-            header="mm ratio  after every calibration cycle"
-        )
+        with WALKER.if_todo(f"save_{stations}_history"):
+            np.savetxt(
+                f'rms_noise_history_{stations}.csv', 
+                np.asarray(calibration.rms_history), 
+                delimiter=",", 
+                header="rms noise after every calibration cycle (Jy/beam)"
+            )
+            np.savetxt(
+                f'mm_ratio_noise_history_{stations}.csv', 
+                np.asarray(calibration.ratio_history), 
+                delimiter=",", 
+                header="mm ratio  after every calibration cycle"
+            )
     
     
     # copy the calibrated measurementsets into final file 
