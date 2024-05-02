@@ -209,6 +209,15 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         final_cycle_fj = 0
         data_in = "DATA"
         
+        rms_history = np.loadtxt(f'rms_noise_history_core.csv', delimiter=",")
+        ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
+        
+        assert len(rms_history) == len(ratio_history)
+        if np.argmax(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
+            correct_cycle = -len(rms_history) - 1
+        else:
+            correct_cycle = np.argmax(ratio_history[1:])
+        
         if len(solution) != 0:
             final_cycle_sol = int(solution[-1].split("-")[2][1:])
         if len(fulljones_solution) != 0:
@@ -218,11 +227,11 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         print(0 > final_cycle_sol >= final_cycle_fj)
 
         if final_cycle_sol >= final_cycle_fj > 0:
-            Logger.info(f"correction Gain-scalar of {solution[-1]}")
+            Logger.info(f"correction Gain-scalar of {solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
                 f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
-                    cor.parmdb={solution[-1]} cor.correction=phase000',
+                    cor.parmdb={solution[correct_cycle]} cor.correction=phase000',
                 log='$nameMS_corPH-core.log', 
                 commandType='DP3'
             )
@@ -230,11 +239,11 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         
         
         if final_cycle_fj >= final_cycle_sol > 0:
-            Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
+            Logger.info(f"Correction Gain of {fulljones_solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
                 f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
-                    cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
+                    cor.parmdb={fulljones_solution[correct_cycle]} cor.correction=fulljones \
                     cor.soltab=[amplitude000,phase000]',
                 log='$nameMS_corAMPPHslow-core.log', 
                 commandType='DP3'
@@ -482,10 +491,10 @@ def main(args: argparse.Namespace) -> None:
                 calibration.clean(imagename)
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 
-            #if stopping or cycle == calibration.stop:
+            if stopping or cycle == calibration.stop:
             #    Logger.info("Start Peeling")                
             #    #pipeline.peel(peel_mss, calibration.s)
-            #    break
+                break
             
         if stations == "all":
             pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)    

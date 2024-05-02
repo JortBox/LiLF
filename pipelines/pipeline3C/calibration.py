@@ -178,17 +178,6 @@ class SelfCalibration(object):
                 [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
                 losoto_ops
             )
-                
-            lib_util.run_losoto(
-                self.s, 
-                f'Gp-c{self.cycle:02d}-{self.stats}-reftest', 
-                [f'{ms}/calGp-{self.stats}.h5' for ms in self.mss.getListStr()],
-                [
-                    f'{parset_dir}/losoto-clip-large.parset', 
-                    f'{parset_dir}/losoto-plot2d-remote-ref.parset', 
-                    f'{parset_dir}/losoto-plot-remote-ref.parset'
-                ]
-            )
         
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
@@ -526,8 +515,7 @@ class SelfCalibration(object):
     
     def prepare_next_iter(self, imagename: str, rms_noise_pre: float, mm_ratio_pre: float) -> tuple[float, float, bool]:
         stopping = False
-        self.rms_history.append(rms_noise_pre)
-        self.ratio_history.append(mm_ratio_pre)
+        
         
         im = lib_img.Image(imagename+'-MFS-image.fits')
         im.makeMask(self.s, self.cycle, threshpix=5, rmsbox=(500,30), atrous_do=False )
@@ -539,5 +527,7 @@ class SelfCalibration(object):
             stopping = True  # if already doing amp and not getting better, quit
         if rms_noise > 0.95*rms_noise_pre and mm_ratio < 1.05*mm_ratio_pre:
             self.doamp = True
-            
+        
+        self.rms_history.append(rms_noise)
+        self.ratio_history.append(mm_ratio)
         return rms_noise, mm_ratio, stopping
