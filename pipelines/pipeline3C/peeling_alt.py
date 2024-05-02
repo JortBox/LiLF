@@ -5,13 +5,13 @@ import sys, os, glob
 import numpy as np
 import pyregion
 
-from shutil import move
-from .calibration import SelfCalibration
+sys.path.append("/data/scripts/LiLF")
+
 import pipelines.pipeline3C.pipeline_utils as pipeline
 from pyregion.parser_helper import Shape
 from astropy.table import Table as AstroTab
 
-sys.path.append("/net/voorrijn/data2/boxelaar/scripts/LiLF")
+
 
 from LiLF_lib import lib_img, lib_util, lib_log
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
@@ -31,7 +31,7 @@ def image_quick(measurements: MeasurementSets, imagename: str, data_column: str=
         SCHEDULE,
         "wsclean-peel.log",
         measurements.getStrWsclean(),
-        do_predict=True,
+        do_predict=predict,
         name=imagename,
         data_column=data_column,
         size=512,
@@ -127,87 +127,111 @@ def get_field_model(MSs: MeasurementSets, region):
         channels_out=2,
     )
 
-    
-    
-def peel_single_source(MSs_shift, peel_source, do_test: bool = False):
-    cal = SelfCalibration(MSs_shift, (None, None), SCHEDULE)
-    name = str(peel_source["Source_id"])
+def peel_single_source_original(MSs_shift, s, name, peel_region_file):
+    # image
+    logger.info("Peel - Image...")
     imagename_peel = "peel-%s/img_%s" % (name, name)
     
-    image_quick(cal.mss, imagename_peel, data_column="DATA")
+    #image and predict source to peel
+    image_quick(MSs_shift, imagename_peel, data_column="DATA")
     
-    # Align MODEL_DATA with source to peel
-    set_model_to_peel_source(cal.mss, peel_source, imagename_peel)
+    # calibrate
+    logger.info("Peel - Calibrate...")
+    MSs_shift.run(
+        "DP3 "
+        + parset_dir
+        + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
+            sol.h5parm=$pathMS/calGp.h5 sol.mode=scalar \
+            sol.solint=10 sol.smoothnessconstraint=1e6",
+        log="$nameMS_solGp-peel.log",
+        commandType="DP3",
+    )
     
-    cal.solve_gain("scalar", solint=1)
-    cal.solve_gain("fulljones", solint=16)
+    lib_util.run_losoto(
+        s,
+        "Gp-peel_%s" % name,
+        [ms + "/calGp.h5" for ms in MSs_shift.getListStr()],
+        [
+            parset_dir + "/losoto-plot2d.parset",
+            parset_dir + "/losoto-plot.parset",
+        ],
+        plots_dir="peel-%s" % name,
+    )
     
-    move(f'cal-Gp-c{cal.cycle:02d}-{cal.stats}-ampnorm.h5', f'peel-{name}/')
-    move(f'plots-Gp-c{cal.cycle:02d}-{cal.stats}-ampnorm', f'peel-{name}/')
+
+    # predict in MSs
+    logger.info("Peel - Predict final...")
+    for model_file in glob.glob(imagename_peel + "*model.fits"):
+        lib_img.blank_image_reg(
+            model_file, peel_region_file, blankval=0.0, inverse=True
+        )
+        
+    s.add(
+        f"wsclean -predict -name {imagename_peel} \
+            -j {s.max_processors} -channels-out 2 -reorder\
+            -parallel-reordering 4 {MSs_shift.getStrWsclean()}",  # was MSs
+        log="wsclean-pre.log",
+        commandType="wsclean",
+        processors="max",
+    )
+    s.run(check=True)
+
+    # corrupt
+    MSs_shift.run( # was MSs
+        f"DP3 {parset_dir}/DP3-cor.parset msin=$pathMS \
+            msin.datacolumn=MODEL_DATA msout.datacolumn=MODEL_DATA \
+            cor.invert=False cor.parmdb=cal-Gp-peel_{name}.h5 cor.correction=phase000",
+        log="$nameMS_corrupt.log",
+        commandType="DP3",
+    )
     
-    move(f'cal-Ga-c{cal.cycle:02d}-{cal.stats}-ampnorm.h5', f'peel-{name}/')
-    move(f'plots-Ga-c{cal.cycle:02d}-{cal.stats}-ampnorm', f'peel-{name}/')
+    image_quick(MSs_shift, f'peel-{name}/test-corrupted-model-{name}', predict=False)
     
-    image_quick(cal.mss, f'peel-{name}/test-pre-{name}')
-    
-    sol_suffix = f'c{cal.cycle:02d}-{cal.stats}-ampnorm'
-    
-    logger.info(f'Scalarphase corruption... ({name})')
-    cal.mss.run(
-        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=MODEL_DATA \
-            msout.datacolumn=CORRUPT_MODEL_DATA cor.updateweights=False \
-            cor.parmdb=peel-{name}/cal-Gp-{sol_suffix}.h5 \
-            cor.correction=phase000 cor.invert=False',
-        log=f'$nameMS_corrupt_Gp-{sol_suffix}.log', 
-        commandType='DP3'
+    '''
+    # TEMPORARY CALL
+    MSs_shift.addcol("CORRECTED_DATA", "DATA")
+    MSs_shift.run( # was MSs
+        'taql "update $pathMS set CORRECTED_DATA = DATA"',
+        log="$nameMS_taql.log",
+        commandType="general",
     )
 
-    logger.info(f'Full-Jones corruption... ({name})')
-    cal.mss.run(
-        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRUPT_MODEL_DATA \
-            msout.datacolumn=CORRUPT_MODEL_DATA cor.correction=fulljones \
-            cor.parmdb=peel-{name}/cal-Ga-{sol_suffix}.h5 \
-            cor.soltab=[amplitude000,phase000] cor.invert=False', 
-        log=f'$nameMS_corrupt_Ga-{sol_suffix}.log', 
-        commandType='DP3'
+    # subtract
+    logger.info(
+        "Subtract model: CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA..."
+    )
+    MSs_shift.run( # was MSs
+        'taql "update $pathMS set CORRECTED_DATA = CORRECTED_DATA - MODEL_DATA"',
+        log="$nameMS_taql.log",
+        commandType="general",
     )
     
-    logger.info(f'SET SUBTRACTED_DATA = {cal.data_column} - CORRUPT_MODEL_DATA ({name})')
-    cal.mss.addcol('SUBTRACTED_DATA', cal.data_column)
-    cal.mss.run(
-        f'taql "UPDATE $pathMS SET SUBTRACTED_DATA = {cal.data_column} - CORRUPT_MODEL_DATA"',
-        log='$nameMS_taql_subtract.log',
-        commandType='general'
-    )
-    '''
-    logger.info(f'Scalarphase correction... ({name})')
-    cal.mss.run(
-        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS \
-            msin.datacolumn=SUBTRACTED_DATA msout.datacolumn=SUBTRACTED_DATA \
-            cor.parmdb=peel-{name}/cal-Gp-{sol_suffix}.h5 \
-            cor.updateweights=False cor.correction=phase000',
-        log=f'$nameMS_cor_Gp_subtracted-{sol_suffix}.log', 
-        commandType='DP3'
-    )
-    '''
-    if do_test:        
-        logger.info('Test empty... (SUBTRACTED_DATA)')
-        lib_util.run_wsclean(
-            SCHEDULE, 
-            f'wsclean-peel.log', 
-            cal.mss.getStrWsclean(), 
-            weight='briggs -0.5',
-            data_column='SUBTRACTED_DATA', 
-            channels_out=3,
-            name=f'peel-{name}/test-corrupted-model-{name}', 
-            scale='2.0arcsec', 
-            size=2000, 
-            niter=10000, 
-            nmiter=0,
-            no_update_model_required='', 
-            minuv_l=30 
-        )
     
+    
+    # image
+    logger.info("Peel - Image...")
+    lib_util.run_wsclean(
+        s,
+        "wsclean-test-2.log",
+        MSs_shift.getStrWsclean(),  # was MSs
+        name="img/test_2_%s" % (name),
+        size=512,
+        parallel_gridding=4,
+        baseline_averaging="",
+        scale="2.5arcsec",
+        niter=100000,
+        no_update_model_required="",
+        minuv_l=30,
+        mgain=0.4,
+        nmiter=0,
+        auto_threshold=5,
+        local_rms="",
+        local_rms_method="rms-with-min",
+        join_channels="",
+        fit_spectral_pol=2,
+        channels_out=2,
+    )
+    '''    
     
 def set_model_to_peel_source(MSs, peel_source, imagename, make_region: bool =True):
     name = str(peel_source["Source_id"])
@@ -241,11 +265,12 @@ def set_model_to_peel_source(MSs, peel_source, imagename, make_region: bool =Tru
         lib_img.blank_image_reg(
             model_file, peel_region_file, blankval=0.0, inverse=True
         ) 
-        
+    
+    name_test = imagename.split("/")[-1]    
     # predict the source to peel
     logger.info("Peel - Predict init...")
     SCHEDULE.add(
-        f"wsclean -predict -name {imagename_peel} \
+        f"wsclean -predict -name {name_test} \
             -j {SCHEDULE.max_processors} -channels-out 2 -reorder \
             -parallel-reordering 4 {MSs.getStrWsclean()}",
         log="wsclean-pre.log",
@@ -288,8 +313,23 @@ def load_sky(MSs: MeasurementSets, region: str|None):
     table["dist"] = distances
     return table
 
+def subtract_model(MSs: MeasurementSets, col_in: str = "CORRECTED_DATA", col_out: str = "CORRECTED_DATA"):
+    logger.info(f"Subtract model: {col_out} = {col_in} - MODEL_DATA...")
+    MSs.run(
+        f'taql "update $pathMS set {col_out} = {col_in} - MODEL_DATA"',
+        log="$nameMS_taql.log",
+        commandType="general",
+    )
+    
+def add_model(MSs: MeasurementSets, col_in: str = "CORRECTED_DATA", col_out: str = "CORRECTED_DATA"):
+    logger.info(f"Add model back: {col_out} = {col_in} + MODEL_DATA...")
+    MSs.run(
+        f'taql "update $pathMS set {col_out} = {col_in} + MODEL_DATA"',
+        log="$nameMS_taql.log",
+        commandType="general",
+    )
 
-def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2, original: bool = True):
+def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2, original: bool = True, do_test: bool = False):
     global SCHEDULE
     global IMAGENAME
     SCHEDULE = s
@@ -311,7 +351,10 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
   
     # get model for entire sub-field
     with WALKER.if_todo("sub-field"):
-        get_field_model(MSs, region)   
+        get_field_model(MSs, region)
+        
+        # subtract model of entire field
+        subtract_model(MSs)
         
         
     table = load_sky(MSs, region)
@@ -323,6 +366,58 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
     if len(satellite_sources) < peel_max:
         n_to_peel = len(satellite_sources)
     
+    for i, peel_source in enumerate(satellite_sources):
+        if i + 1 > n_to_peel:
+            break
+        
+        name = str(peel_source["Source_id"])
+        imagename_peel = "peel-" + name + "/" + IMAGENAME.split("/")[-1]
+        
+        #dist = lib_util.distanceOnSphere(phase_center[0], phase_center[1], peel_source["RA"], peel_source["DEC"])
+
+        logger.info(f"Peeling {name} ({peel_source['Total_flux']:.1f} Jy)")
+        with WALKER.if_todo("peel-%s" % name):
+            os.system("mkdir peel-%s" % name)
+
+            # predict and blank model to the source to peel
+            set_model_to_peel_source(MSs, peel_source, imagename_peel)
+            
+            # add the source to peel back
+            add_model(MSs)
+            
+            if do_test:
+                image_quick(MSs, f'peel-{name}/test-add-{name}')
+            
+            lib_util.check_rm("mss-dir")
+            os.makedirs("mss-dir")
+            
+            # phaseshift + avg
+            logger.info("Peel - Phaseshift+avg...")
+            MSs.run(
+                f"DP3 {parset_dir}/DP3-shiftavg.parset msin=$pathMS \
+                    msout=mss-dir/$nameMS.MS msin.datacolumn=CORRECTED_DATA \
+                    msout.datacolumn=DATA avg.timestep=8 avg.freqstep=16 \
+                    shift.phasecenter=[{peel_source['RA']}deg,{peel_source['DEC']}deg]",
+                log="$nameMS_shift.log",
+                commandType="DP3",
+            )
+            
+            MSs_shift = MeasurementSets(
+                glob.glob("mss-dir/*.MS"), 
+                s, 
+                check_flags=False, 
+                check_sun=True
+            )
+            
+            peel_region_file = f"peel-{name}/{name}.reg"
+            if original:
+                peel_single_source_original(MSs_shift, s, name, peel_region_file)
+            else:
+                peel_single_source(MSs_shift, s, name, peel_region_file, do_test=True)
+    
+    
+    
+    sys.exit()
     #First, subtract central source
     for peel_source in central_sources:
         name = str(peel_source["Source_id"])
@@ -370,10 +465,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             )
             
             image_quick(MSs, f'peel-{name}/test-subtract-central-{name}')
-            
-    sys.exit()
 
-      
     # cycle on sources to peel
     for i, peel_source in enumerate(satellite_sources):
         name = str(peel_source["Source_id"])
@@ -445,8 +537,6 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
                 commandType="general",
             )
 
-
-    sys.exit()
     with WALKER.if_todo("reprepare dataset"):
         # blank models
         logger.info("Cleanup model images...")
@@ -474,3 +564,24 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
     
     #remove obsolete mss-dir
     lib_util.check_rm("mss-dir")
+    
+if __name__ == "__main__":
+    Logger_obj = lib_log.Logger('pipeline-3c-peel.logger')
+    logger = lib_log.logger
+    SCHEDULE = lib_util.Scheduler(log_dir=Logger_obj.log_dir, dry=False)
+    WALKER = lib_util.Walker('pipeline-3c-peel.walker')
+    
+    # parse parset
+    parset = lib_util.getParset()
+    parset_dir = parset.get("LOFAR_3c_core", "parset_dir")
+
+    TARGET = os.getcwd().split("/")[-1]
+    
+    original_mss = MeasurementSets(
+        glob.glob(f'*.MS-phaseup'), 
+        SCHEDULE, 
+        check_flags=False, 
+        check_sun=True
+    ) 
+    
+    peel(original_mss, SCHEDULE, peel_max=2, original=True)
