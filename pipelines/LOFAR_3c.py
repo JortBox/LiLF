@@ -218,6 +218,8 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         else:
             correct_cycle = np.argmax(ratio_history) - len(ratio_history)
         
+        correct_cycle = -1
+        
         if len(solution) != 0:
             final_cycle_sol = int(solution[-1].split("-")[2][1:])
         if len(fulljones_solution) != 0:

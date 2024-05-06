@@ -19,7 +19,7 @@ parset_dir = parset.get('LOFAR_3c_core', 'parset_dir')
 TARGET = os.getcwd().split('/')[-1]
 
 extended_targets = [
-    '3c223','3c231','3c236','3c264','3c274','3c284',
+    '3c223','3c236','3c264','3c274','3c284',
     '3c285','3c293','3c296','3c31','3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
     '3c454.3','3c465','3c84'
@@ -90,7 +90,7 @@ class SelfCalibration(object):
             commandType='python'
         )
           
-        if mode in ["phase"]:
+        if mode in ["phase", "amplitude", "scalar"]:
             logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
             self.mss.run(
                 f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
@@ -98,6 +98,15 @@ class SelfCalibration(object):
                 commandType='python'
             ) 
             model_in = "SMOOTHED_MODEL_DATA"
+            
+        #elif mode == "fulljones":
+        #    logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
+        #    self.mss.run(
+        #        f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -d -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
+        #        log='$nameMS_smooth2.log', 
+        #        commandType='python'
+        #    ) 
+        #    model_in = "SMOOTHED_MODEL_DATA"
         else:
             model_in = "MODEL_DATA" 
 
@@ -105,7 +114,7 @@ class SelfCalibration(object):
             
         
     def solve_gain(self, mode:str, solint = None, bl_smooth_fj = False, smooth_all_pols = False) -> None:
-        assert mode in ["phase", "scalar", "fulljones"]
+        assert mode in ["phase", "amplitude", "scalar", "fulljones"]
         if solint is None:
             if mode in ["phase", "scalar"]:
                 solint = next(self.solint_ph)
@@ -149,6 +158,42 @@ class SelfCalibration(object):
             self.mss.run(
                 command, 
                 log=f'$nameMS_corGph-c{self.cycle:02d}.log', 
+                commandType='DP3'
+            )
+            self.data_column = "CORRECTED_DATA"
+            
+        elif mode == 'amplitude':
+            self.mss.run(
+                f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=scalaramplitude \
+                    sol.h5parm=$pathMS/calGsa-{self.stats}.h5 \
+                    sol.modeldatacolumns=[MODEL_DATA] \
+                    sol.solint={solint} sol.smoothnessconstraint=1e6',
+                log=f'$nameMS_solGsa-c{self.cycle:02d}.log', 
+                commandType="DP3"
+            )
+            
+            losoto_ops = [
+                f'{parset_dir}/losoto-plot2d.parset', 
+                f'{parset_dir}/losoto-plot.parset'
+            ]
+            #if self.stats == "all": 
+            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+                
+            lib_util.run_losoto(
+                self.s, 
+                f'Gsa-c{self.cycle:02d}-{self.stats}', 
+                [f'{ms}/calGsa-{self.stats}.h5' for ms in self.mss.getListStr()],
+                losoto_ops
+            )
+        
+            # Correct DATA -> CORRECTED_DATA
+            logger.info('Correction PH...')
+            command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
+                cor.parmdb=cal-Gsa-c{self.cycle:02d}-{self.stats}.h5 cor.correction=amplitude000' 
+            self.mss.run(
+                command, 
+                log=f'$nameMS_corGsa-c{self.cycle:02d}.log', 
                 commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
@@ -311,10 +356,15 @@ class SelfCalibration(object):
         # Use masking scheme from LOFAR_dd_wsclean
         im = lib_img.Image(imagename+'-MFS-image.fits')
         #im.makeMask(self.s, self.cycle, mode="breizorro", threshpix=5, rmsbox=(50,5), atrous_do=True)#, maskname=maskfits) #Pybdsf step here
+        if TARGET in very_extended_targets or TARGET in extended_targets:
+            threshold = 3
+        else:
+            threshold = 5
+            
         if self.stats == "core":
             im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
         else:
-            im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
+            im.makeMask(mode="default", threshpix=threshold, rmsbox=(50,5), atrous_do=True)
             
         if (region is not None) and (self.stats == "all") and (not self.doamp):
             logger.info("Manual masks used")
@@ -326,7 +376,7 @@ class SelfCalibration(object):
             
     def clean(self, imagename: str, uvlambdamin: int = 30, deep: bool = False) -> None:
         # special for extended sources:
-        
+        print("TARGET:", TARGET)
         if TARGET in very_extended_targets:
             kwargs1 = {
                 'weight': 'briggs -0.5', 
@@ -365,6 +415,10 @@ class SelfCalibration(object):
         if self.stats == "core":
             kwargs1["size"] = 500; kwargs1["scale"] = "50.0arcsec" # type: ignore
             kwargs2["size"] = 500; kwargs2["scale"] = "50.0arcsec" # type: ignore
+        
+        print("kwargs1, kwargs2")   
+        print(kwargs1)
+        print(kwargs2)
 
         # if next is a "cont" then I need the do_predict
         logger.info('Cleaning shallow (cycle: '+str(self.cycle)+')...')
