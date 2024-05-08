@@ -42,11 +42,12 @@ def indices_to_slices(input):
 
 
 class Flux(object):
-    def __init__(self, flux: Quantity, freq: Quantity = 57.7*u.MHz, error: Quantity = 0.*u.Jy, spectral_index = -1.0):
+    def __init__(self, flux: Quantity, freq: Quantity = 57.7*u.MHz, error: Quantity = 0.*u.Jy, spectral_index = -1.0, manual: bool = True):
         self.flux = flux
         self.error = error
         self.freq = freq
         self.spectral_index = spectral_index
+        self.is_manual = manual
         
     def __str__(self) -> str:
         return f"{self.flux} at {self.freq}"
@@ -109,6 +110,13 @@ class SED(object):
 
         self.fluxes.append(new_flux)
         self.fluxes_dict.update({new_key: indices})
+        
+    def plot(self, show: bool = True, *args, **kwargs):
+        plt.errorbar(self.freq[self.is_manual == False], self.flux[self.is_manual == False], yerr=self.error[self.is_manual == False], *args, **kwargs)
+        plt.semilogy()
+        plt.semilogx()
+        if show:
+            plt.show()
     
     @property 
     def flux(self):
@@ -121,6 +129,10 @@ class SED(object):
     @property
     def error(self):
         return np.asarray([flux.error.to(u.Jy).value for flux in self.fluxes]) * u.Jy
+    
+    @property
+    def is_manual(self):
+        return np.asarray([flux.is_manual for flux in self.fluxes])
     
     
     
@@ -288,7 +300,7 @@ class Catalogue3C(object):
 
 
 
-def query_fluxes_ned(source: Source3C):
+def query_fluxes_ned(source: Source3C, freq_limit = 1.e10 * u.Hz):
     table = Ned.get_table(source.name, table="photometry")
     
     for item in table:
@@ -297,7 +309,7 @@ def query_fluxes_ned(source: Source3C):
         error = (item["Lower limit of uncertainty"] + item["Upper limit of uncertainty"])/2 # type: ignore
         
         
-        if freq < 1.e10 * u.Hz:
+        if freq < freq_limit:
             if str(error) == "--":
                 error = 0
                 
@@ -312,7 +324,7 @@ def query_fluxes_ned(source: Source3C):
                 flux *= u.Unit(item["Units"]) # type: ignore
                 error *= u.Unit(item["Units"]) # type: ignore
                 
-            source.SED.insert(flux, freq.to(u.MHz), error)
+            source.SED.insert(flux, freq.to(u.MHz), error, manual=False)
             
 
 

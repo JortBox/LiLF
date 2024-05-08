@@ -78,7 +78,7 @@ class SelfCalibration(object):
         if mode == "fulljones" and not smooth_fj:
             return self.data_column, "MODEL_DATA"
         
-        if smooth_all_pols or mode in ["phase"]:
+        if smooth_all_pols or mode in ["phase, scalar"]:
             command = f'-r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
         else:
             command = f'-r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
@@ -90,7 +90,7 @@ class SelfCalibration(object):
             commandType='python'
         )
           
-        if mode in ["phase", "amplitude", "scalar"]:
+        if mode in ["phase", "scalar"]:
             logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
             self.mss.run(
                 f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
@@ -99,22 +99,18 @@ class SelfCalibration(object):
             ) 
             model_in = "SMOOTHED_MODEL_DATA"
             
-        #elif mode == "fulljones":
-        #    logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
-        #    self.mss.run(
-        #        f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -d -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
-        #        log='$nameMS_smooth2.log', 
-        #        commandType='python'
-        #    ) 
-        #    model_in = "SMOOTHED_MODEL_DATA"
+
         else:
             model_in = "MODEL_DATA" 
 
         return "SMOOTHED_DATA", model_in
-            
+    
+    
+ 
+        
         
     def solve_gain(self, mode:str, solint = None, bl_smooth_fj = False, smooth_all_pols = False) -> None:
-        assert mode in ["phase", "amplitude", "scalar", "fulljones"]
+        assert mode in ["phase", "diagonal", "scalar", "fulljones"]
         if solint is None:
             if mode in ["phase", "scalar"]:
                 solint = next(self.solint_ph)
@@ -162,41 +158,42 @@ class SelfCalibration(object):
             )
             self.data_column = "CORRECTED_DATA"
             
-        elif mode == 'amplitude':
+        elif mode == 'diagonal':
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn=SMOOTHED_DATA sol.mode=scalaramplitude \
-                    sol.h5parm=$pathMS/calGsa-{self.stats}.h5 \
-                    sol.modeldatacolumns=[MODEL_DATA] \
-                    sol.solint={solint} sol.smoothnessconstraint=1e6',
-                log=f'$nameMS_solGsa-c{self.cycle:02d}.log', 
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=diagonalamplitude \
+                    sol.h5parm=$pathMS/calGdia-{self.stats}.h5 \
+                    sol.modeldatacolumns=[{model_in}] \
+                    sol.solint={solint} sol.smoothnessconstraint=0.1e6',
+                log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
             
             losoto_ops = [
-                f'{parset_dir}/losoto-plot2d.parset', 
-                f'{parset_dir}/losoto-plot.parset'
+                parset_dir+'/losoto-clip.parset', 
+                parset_dir+'/losoto-plot2d.parset', 
+                parset_dir+'/losoto-plot2d-pol.parset', 
+                parset_dir+'/losoto-plot-pol.parset'
             ]
-            #if self.stats == "all": 
-            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 
             lib_util.run_losoto(
                 self.s, 
-                f'Gsa-c{self.cycle:02d}-{self.stats}', 
-                [f'{ms}/calGsa-{self.stats}.h5' for ms in self.mss.getListStr()],
+                f'Gdia-c{self.cycle:02d}-{self.stats}', 
+                [f'{ms}/calGdia-{self.stats}.h5' for ms in self.mss.getListStr()],
                 losoto_ops
             )
         
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Gsa-c{self.cycle:02d}-{self.stats}.h5 cor.correction=amplitude000' 
+                cor.parmdb=cal-Gdia-c{self.cycle:02d}-{self.stats}.h5 cor.correction=amplitude000' 
             self.mss.run(
                 command, 
-                log=f'$nameMS_corGsa-c{self.cycle:02d}.log', 
+                log=f'$nameMS_corGdia-c{self.cycle:02d}.log', 
                 commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
+            
             
         elif mode == 'scalar':
             self.mss.run(
@@ -236,25 +233,27 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
+            if self.stats == "core": smoothcons = '0'
+            else: smoothcons = '0.1e6'
+                
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
                     msin.datacolumn={data_in} sol.mode=fulljones \
                     sol.h5parm=$pathMS/calGa-{self.stats}.h5 \
                     sol.modeldatacolumns=[{model_in}] \
-                    sol.solint={solint}',
+                    sol.solint={solint} sol.smoothnessconstraint={smoothcons}',
                 log=f'$nameMS_solGa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
             
             losoto_ops = [
-                #parset_dir+'/losoto-ampnorm-full-diagonal.parset',
                 parset_dir+'/losoto-clip.parset', 
                 parset_dir+'/losoto-plot2d.parset', 
                 parset_dir+'/losoto-plot2d-pol.parset', 
                 parset_dir+'/losoto-plot-pol.parset'
             ]
-            if self.stats == "core":
-                losoto_ops.insert(0, f'{parset_dir}/losoto-ampnorm-full-diagonal.parset')  
+            #if self.stats == "core":
+            losoto_ops.insert(0, f'{parset_dir}/losoto-ampnorm-full-diagonal.parset')  
             #if self.stats == "all": 
             #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
             

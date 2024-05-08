@@ -8,9 +8,10 @@ import astropy.constants as const
 import numpy as np
 from astropy.io import fits
 
+sys.path.append("/data/scripts/LiLF")
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 
-PARSET_DIR = "/net/voorrijn/data2/boxelaar/scripts/LiLF/parsets/LOFAR_3c_core/"
+PARSET_DIR = "/data/scripts/LiLF/parsets/LOFAR_3c_core/"
 
 RSISlist = [
     'RS106LBA','RS205LBA','RS208LBA','RS210LBA','RS305LBA','RS306LBA',
