@@ -28,7 +28,6 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('--bl_smooth_fj', dest='bl_smooth_fj', action='store_true', default=False)
     parser.add_argument('--smooth_all_pols', dest='smooth_all_pols', action='store_true', default=False)
     parser.add_argument('--scalar_only', dest='scalar_only', action='store_true', default=False)
-    parser.add_argument('--no_fulljones', dest='no_fulljones', action='store_true', default=False)
     return parser.parse_args()
 
     
@@ -361,8 +360,8 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
     decdeg = phasecentre[1]
     
     if TARGET in ["3c196", "3c380", "3c295"]:
-        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/models/calib-simple.skydb {sourcedb}")
-        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/models/calib-simple.skymodel tgts.skymodel")
+        os.system(f"cp /data/scripts/LiLF/models/calib-simple.skydb {sourcedb}")
+        os.system(f"cp /data/scripts/LiLF/models/calib-simple.skymodel tgts.skymodel")
         calname = MSs.getListObj()[0].getNameField()
         
         # Predict MODEL_DATA
@@ -374,7 +373,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
         )
         
     elif TARGET == "3c274":
-        os.system(f"cp /data/data/3Csurvey/tgts/3c274/tgts_ref2.skymodel tgts.skymodel")
+        os.system(f"cp /data/data/3Csurvey/tgts/3c274/tgts_ref.skymodel tgts.skymodel")
         os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
         
         # Predict MODEL_DATA
@@ -480,13 +479,7 @@ def main(args: argparse.Namespace) -> None:
         else:
             total_cycles = 10
 
-        calibration = pipeline.SelfCalibration(
-            MSs, 
-            schedule=SCHEDULE, 
-            total_cycles=total_cycles, 
-            mask=masking, 
-            stats=stations
-        )
+        calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
         
         for cycle in calibration:
             #calibration.empty_clean(f"img/img-empty-c{cycle}")
@@ -498,37 +491,26 @@ def main(args: argparse.Namespace) -> None:
                         calibration.solve_gain('phase') 
                     
                     if not args.scalar_only and cycle > 1:
-                        calibration.solve_gain(
-                            "fulljones", 
-                            bl_smooth_fj=args.bl_smooth_fj, 
-                            smooth_all_pols=args.smooth_all_pols
-                        )
+                        calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
                     
                 else:   
                     if calibration.doph:
                         calibration.solve_gain('scalar')
-                    
+                        
                     if calibration.doamp and not args.scalar_only and cycle > 1:
-                        if args.no_fulljones:
-                            Logger.info("No fulljones, scalar amplitude solve")
-                            calibration.solve_gain("amplitude")
-                        else:
-                            calibration.solve_gain(
-                                'fulljones', 
-                                bl_smooth_fj=args.bl_smooth_fj, 
-                                smooth_all_pols=args.smooth_all_pols
-                            )
+                        calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 #calibration.empty_clean(f"img/img-empty-c{cycle}")
                 
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 calibration.clean(imagename)
+                #calibration.clean(imagename + 'large', size=8000, predict=False)
                 rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 
             if stopping or cycle == calibration.stop:
-            #    Logger.info("Start Peeling")                
-            #    #pipeline.peel(peel_mss, calibration.s)
+                #Logger.info("Start Peeling")                
+                #pipeline.peel(peel_mss, calibration.s)
                 break
             
         if stations == "all":

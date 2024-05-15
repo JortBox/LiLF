@@ -19,11 +19,12 @@ parset_dir = parset.get('LOFAR_3c_core', 'parset_dir')
 TARGET = os.getcwd().split('/')[-1]
 
 extended_targets = [
-    '3c223','3c236','3c264','3c274','3c284',
+    '3c223','3c236','3c274','3c284',
     '3c285','3c293','3c296','3c31','3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
     '3c454.3','3c465','3c84'
 ]
+
 very_extended_targets = ['3c138','da240']
 
 class SelfCalibration(object):
@@ -78,7 +79,7 @@ class SelfCalibration(object):
         if mode == "fulljones" and not smooth_fj:
             return self.data_column, "MODEL_DATA"
         
-        if smooth_all_pols or mode in ["phase, scalar"]:
+        if smooth_all_pols or mode in ["phase", "scalar", "amplitude"]:
             command = f'-r -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
         else:
             command = f'-r -d -s 0.8 -i {self.data_column} -o SMOOTHED_DATA $pathMS'
@@ -110,7 +111,7 @@ class SelfCalibration(object):
         
         
     def solve_gain(self, mode:str, solint = None, bl_smooth_fj = False, smooth_all_pols = False) -> None:
-        assert mode in ["phase", "diagonal", "scalar", "fulljones"]
+        assert mode in ["phase", "amplitude", "scalar", "fulljones"]
         if solint is None:
             if mode in ["phase", "scalar"]:
                 solint = next(self.solint_ph)
@@ -158,42 +159,41 @@ class SelfCalibration(object):
             )
             self.data_column = "CORRECTED_DATA"
             
-        elif mode == 'diagonal':
+        elif mode == 'amplitude':
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
-                    msin.datacolumn=SMOOTHED_DATA sol.mode=diagonalamplitude \
-                    sol.h5parm=$pathMS/calGdia-{self.stats}.h5 \
+                    msin.datacolumn=SMOOTHED_DATA sol.mode=scalaramplitude \
+                    sol.h5parm=$pathMS/calGsa-{self.stats}.h5 \
                     sol.modeldatacolumns=[{model_in}] \
-                    sol.solint={solint} sol.smoothnessconstraint=0.1e6',
-                log=f'$nameMS_solGp-c{self.cycle:02d}.log', 
+                    sol.solint={solint} sol.smoothnessconstraint=0.5e6',
+                log=f'$nameMS_solGsa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
             
             losoto_ops = [
+                parset_dir + '/losoto-ampnorm-scalar.parset',
                 parset_dir+'/losoto-clip.parset', 
-                parset_dir+'/losoto-plot2d.parset', 
-                parset_dir+'/losoto-plot2d-pol.parset', 
-                parset_dir+'/losoto-plot-pol.parset'
+                parset_dir+'/losoto-plot2d.parset',
+                parset_dir+'/losoto-plot.parset'
             ]
                 
             lib_util.run_losoto(
                 self.s, 
-                f'Gdia-c{self.cycle:02d}-{self.stats}', 
-                [f'{ms}/calGdia-{self.stats}.h5' for ms in self.mss.getListStr()],
+                f'Gsa-c{self.cycle:02d}-{self.stats}', 
+                [f'{ms}/calGsa-{self.stats}.h5' for ms in self.mss.getListStr()],
                 losoto_ops
             )
         
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
-                cor.parmdb=cal-Gdia-c{self.cycle:02d}-{self.stats}.h5 cor.correction=amplitude000' 
+                cor.parmdb=cal-Gsa-c{self.cycle:02d}-{self.stats}.h5 cor.correction=amplitude000' 
             self.mss.run(
                 command, 
-                log=f'$nameMS_corGdia-c{self.cycle:02d}.log', 
+                log=f'$nameMS_corGsa-c{self.cycle:02d}.log', 
                 commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
-            
             
         elif mode == 'scalar':
             self.mss.run(
@@ -233,8 +233,12 @@ class SelfCalibration(object):
             self.data_column = "CORRECTED_DATA"
 
         elif mode == 'fulljones':
-            if self.stats == "core": smoothcons = '0'
-            else: smoothcons = '0.1e6'
+            #if self.stats == "core": smoothcons = '0'
+            #else: smoothcons = '0.1e6'
+            if TARGET in extended_targets:
+                smoothcons = '1.e6'
+            else:
+                smoothcons = '0.1e6'
                 
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
@@ -364,8 +368,12 @@ class SelfCalibration(object):
             im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
         else:
             im.makeMask(mode="default", threshpix=threshold, rmsbox=(50,5), atrous_do=True)
-            
-        if (region is not None) and (self.stats == "all") and (not self.doamp):
+        
+        if self.stats == "all" and TARGET in extended_targets:
+            logger.info("Manual masks used")
+            lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
+            lib_img.blank_image_reg(maskfits, region, blankval = 1.)
+        elif (region is not None) and (self.stats == "all") and (not self.doamp):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
@@ -373,7 +381,7 @@ class SelfCalibration(object):
             logger.info("NO Manual mask used")
             
             
-    def clean(self, imagename: str, uvlambdamin: int = 30, deep: bool = False) -> None:
+    def clean(self, imagename: str, uvlambdamin: int = 30, deep: bool = False, size: int = 2500, predict: bool = True) -> None:
         # special for extended sources:
         print("TARGET:", TARGET)
         if TARGET in very_extended_targets:
@@ -392,11 +400,11 @@ class SelfCalibration(object):
         elif TARGET in extended_targets:
             kwargs1 = {
                 'weight': 'briggs -0.7', 
-                'taper_gaussian': '25arcsec'
+                #'taper_gaussian': '25arcsec'
             }
             kwargs2 = {
                 'weight': 'briggs -0.7', 
-                'taper_gaussian': '25arcsec', 
+                #'taper_gaussian': '25arcsec', 
                 'multiscale_scales': '0,15,30,60,120,240'
             }
         else:
@@ -406,8 +414,8 @@ class SelfCalibration(object):
                 'multiscale_scales': '0,10,20,40,80,160'
             }
         
-        kwargs1.update({"size": 2500}) # type: ignore
-        kwargs2.update({"size": 2500}) # type: ignore
+        kwargs1.update({"size": size}) # type: ignore
+        kwargs2.update({"size": size}) # type: ignore
         kwargs1.update({"scale": "2.0arcsec"}) # type: ignore
         kwargs2.update({"scale": "2.0arcsec"}) # type: ignore
             
@@ -425,7 +433,7 @@ class SelfCalibration(object):
             self.s, 
             'wsclean1-c%02i.log' % self.cycle, 
             self.mss.getStrWsclean(), 
-            do_predict=True, 
+            do_predict=predict, 
             name=imagename,
             parallel_gridding=4, 
             baseline_averaging='',
@@ -455,7 +463,7 @@ class SelfCalibration(object):
                 'wsclean2-c%02i.log' % self.cycle, 
                 self.mss.getStrWsclean(), 
                 name=imagename,
-                do_predict=True, 
+                do_predict=predict, 
                 cont=True, 
                 parallel_gridding=4,
                 niter=1000000, 
@@ -509,7 +517,7 @@ class SelfCalibration(object):
             os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)            
         
         
-    def low_resolution_clean(self, imagename: str, uvlambdamin: int = 30, taper: float=60):
+    def low_resolution_clean(self, imagename: str, uvlambdamin: int = 30, taper: float=25):
         # Low res image
         gaussian_taper = str(taper)+"arcsec"
         logger.info(f'Cleaning low resoluton ({taper} arcsec)...')
@@ -521,7 +529,7 @@ class SelfCalibration(object):
             save_source_list='',
             parallel_gridding=4, 
             size=500, 
-            scale='10arcsec', 
+            scale='5arcsec', 
             weight='briggs -0.7', 
             taper_gaussian=gaussian_taper,
             niter=1000000, 
@@ -578,8 +586,16 @@ class SelfCalibration(object):
     
         if self.doamp and rms_noise > 0.99*rms_noise_pre and mm_ratio < 1.01*mm_ratio_pre and self.cycle > 6:
             stopping = True  # if already doing amp and not getting better, quit
-        if rms_noise > 0.95*rms_noise_pre and mm_ratio < 1.05*mm_ratio_pre:
-            self.doamp = True
+        
+        if TARGET in extended_targets or TARGET in very_extended_targets:
+            if rms_noise > rms_noise_pre and mm_ratio < mm_ratio_pre:
+                self.doamp = True
+        else:
+            if rms_noise > 0.95*rms_noise_pre and mm_ratio < 1.05*mm_ratio_pre:
+                self.doamp = True    
+        
+        #if rms_noise > rms_noise_pre and mm_ratio < mm_ratio_pre:
+        #    self.doamp = True
         
         self.rms_history.append(rms_noise)
         self.ratio_history.append(mm_ratio)

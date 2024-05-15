@@ -42,12 +42,13 @@ def indices_to_slices(input):
 
 
 class Flux(object):
-    def __init__(self, flux: Quantity, freq: Quantity = 57.7*u.MHz, error: Quantity = 0.*u.Jy, spectral_index = -1.0, manual: bool = True):
+    def __init__(self, flux: Quantity, freq: Quantity = 57.7*u.MHz, error: Quantity = 0.*u.Jy, spectral_index = -1.0, manual: bool = True, refcode: str = "NA"):
         self.flux = flux
         self.error = error
         self.freq = freq
         self.spectral_index = spectral_index
         self.is_manual = manual
+        self.refcode = refcode
         
     def __str__(self) -> str:
         return f"{self.flux} at {self.freq}"
@@ -133,6 +134,10 @@ class SED(object):
     @property
     def is_manual(self):
         return np.asarray([flux.is_manual for flux in self.fluxes])
+    
+    @property
+    def refcode(self):
+        return np.asarray([flux.refcode for flux in self.fluxes])
     
     
     
@@ -314,9 +319,9 @@ def query_fluxes_ned(source: Source3C, freq_limit = 1.e10 * u.Hz):
                 error = 0
                 
             if item["Units"] == "milliJy": # type: ignore
-                #flux *= u.mJy
-                #error *= u.mJy
-                continue
+                flux *= u.Jy
+                error *= u.Jy
+                
                 
             elif item["Units"] == "W m^-2^ Hz^-1^": # type: ignore
                 continue
@@ -324,7 +329,7 @@ def query_fluxes_ned(source: Source3C, freq_limit = 1.e10 * u.Hz):
                 flux *= u.Unit(item["Units"]) # type: ignore
                 error *= u.Unit(item["Units"]) # type: ignore
                 
-            source.SED.insert(flux, freq.to(u.MHz), error, manual=False)
+            source.SED.insert(flux, freq.to(u.MHz), error, manual=False, refcode=item["Refcode"])
             
 
 
