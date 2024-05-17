@@ -374,7 +374,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
         )
         
     elif TARGET == "3c274":
-        os.system(f"cp /data/data/3Csurvey/tgts/3c274/tgts_ref2.skymodel tgts.skymodel")
+        os.system(f"cp /data/data/3Csurvey/tgts/3c274/VirLow.skymodel tgts.skymodel")
         os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
         
         # Predict MODEL_DATA
@@ -531,12 +531,6 @@ def main(args: argparse.Namespace) -> None:
             #    #pipeline.peel(peel_mss, calibration.s)
                 break
             
-        if stations == "all":
-            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)    
-            
-            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-            calibration.low_resolution_clean("img/img-low")   
-        
         with WALKER.if_todo(f"save_{stations}_history"):
             np.savetxt(
                 f'rms_noise_history_{stations}.csv', 
@@ -550,6 +544,21 @@ def main(args: argparse.Namespace) -> None:
                 delimiter=",", 
                 header="mm ratio  after every calibration cycle"
             )
+            
+            if stations == "all":
+                pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET) 
+            
+                Logger.info(f"Saving model to {TARGET}.skymodel")
+                os.system(f"python /data/scripts/revoltek-scripts/fits2sky.py \
+                    img/{TARGET}-img-final-MFS {TARGET}.skymodel --ref_freq 57.7e6 \
+                    --fits_mask img/img-all-01-mask.fits --min_peak_flux_jy 0.005"
+                )
+            
+        if stations == "all":
+            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
+            calibration.low_resolution_clean("img/img-low")   
+        
+        
     
     
     # copy the calibrated measurementsets into final file 

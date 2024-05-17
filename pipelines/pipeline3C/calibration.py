@@ -19,7 +19,7 @@ parset_dir = parset.get('LOFAR_3c_core', 'parset_dir')
 TARGET = os.getcwd().split('/')[-1]
 
 extended_targets = [
-    '3c223','3c236','3c274','3c284',
+    '3c223','3c236','3c284',
     '3c285','3c293','3c296','3c31','3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
     '3c454.3','3c465','3c84'
@@ -395,15 +395,18 @@ class SelfCalibration(object):
             kwargs2 = {
                 'weight': 'briggs -0.5', 
                 'taper_gaussian': '75arcsec', 
+                'multiscale_scale_bias':0.5,
                 'multiscale_scales': '0,30,60,120,340'
             }
         elif TARGET in extended_targets:
             kwargs1 = {
                 'weight': 'briggs -0.7', 
+                'multiscale_scale_bias':0.5, 
                 #'taper_gaussian': '25arcsec'
             }
             kwargs2 = {
-                'weight': 'briggs -0.7', 
+                'weight': 'briggs -0.7',
+                'multiscale_scale_bias':0.5,  
                 #'taper_gaussian': '25arcsec', 
                 'multiscale_scales': '0,15,30,60,120,240'
             }
@@ -411,8 +414,14 @@ class SelfCalibration(object):
             kwargs1 = {'weight': 'briggs -0.8'}
             kwargs2 = {
                 'weight': 'briggs -0.6', 
-                'multiscale_scales': '0,10,20,40,80,160'
+                'multiscale_scales': '0,10,20,40,80,160',
+                'multiscale_scale_bias':0.8, 
             }
+        
+        if TARGET == "3c274":
+            kwargs1.update({'weight': 'briggs -1.0'}) # type: ignore
+            kwargs2.update({'weight': 'briggs -1.0'}) # type: ignore
+            kwargs2.update({'multiscale_scale_bias':0.5}) # type: ignore
         
         kwargs1.update({"size": size}) # type: ignore
         kwargs2.update({"size": size}) # type: ignore
@@ -477,8 +486,7 @@ class SelfCalibration(object):
                 local_rms='', 
                 local_rms_method='rms-with-min', 
                 fits_mask=maskfits,
-                multiscale='', 
-                multiscale_scale_bias=0.8,
+                multiscale='',
                 join_channels='', 
                 fit_spectral_pol=2, 
                 channels_out=2, 
