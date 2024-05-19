@@ -18,8 +18,6 @@ import numpy as np
 import astropy.units as u
 import matplotlib.pyplot as plt
 
-
-
 plt.rc('font', family='serif')
 #plt.rc('text',usetex=True)
 
