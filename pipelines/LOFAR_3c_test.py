@@ -350,7 +350,7 @@ def demix(MSs: MeasurementSets):
             )
 
 
-def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
+def predict(MSs: MeasurementSets, doBLsmooth:bool = False) -> None:
     Logger.info('Preparing model...')
     sourcedb = 'tgts.skydb'
     #if not os.path.exists(sourcedb):
@@ -576,14 +576,48 @@ def do_peel():
         cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
         cal.clean(f'img/img-after-peeling')
         
-def demix_3C(target: str):
-    MSs = MeasurementSets(
+def demix3C(MSs, target: str):
+    skymodel = target + ".skymodel"
+    
+    Logger.info('Demixing...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-demix.parset msin=$pathMS msout=$pathMS \
+            demixer.skymodel={skymodel} \
+            demixer.instrumentmodel=$pathMS/instrument_demix \
+            demixer.subtractsources=[{target}]',
+        log='$nameMS_demix.log', 
+        commandType='DP3'
+    )
+        
+def demix_3C_test():    
+    MSs_orig = MeasurementSets(
         glob.glob(f'*.MS-phaseup-final'), 
         SCHEDULE, 
         check_flags=False
     )  
     
-    image_quick(MSs, f'img/img-pre-demix', predict=False)
+    for measurement in MSs_orig.getListStr():
+        os.system('cp -r %s %s' % (measurement, measurement + "-demix") )
+    
+    MSs = MeasurementSets(
+        glob.glob(f'*.MS-phaseup-final-demix'), 
+        SCHEDULE, 
+        check_flags=False
+    )
+    
+    predict(MSs)
+    
+    # make beam region files
+    masking = pipeline.make_beam_region(MSs, TARGET)
+    cal = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, mask=masking)
+    cal.clean(f'img/img-pre-demix', predict=False)
+    
+    demix3C(MSs, "3c34")
+    
+    cal.clean(f'img/img-post-demix', predict=False)
+    
+    
+    
     
     
 def image_quick(measurements: MeasurementSets, imagename: str, data_column: str="CORRECTED_DATA", predict: bool=True):
@@ -641,5 +675,5 @@ if __name__ == "__main__":
     #main(args) 
     ##test_clean() 
     #do_peel()  
-    demix_3C("3c34")    
+    demix_3C_test()    
     

@@ -20,7 +20,9 @@ TARGET = os.getcwd().split('/')[-1]
 
 extended_targets = [
     '3c223','3c236','3c284',
-    '3c285','3c293','3c296','3c31','3c310','3c326',
+    '3c285','3c293','3c296',
+    #'3c31',
+    '3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
     '3c454.3','3c465','3c84'
 ]
@@ -501,7 +503,7 @@ class SelfCalibration(object):
                 'wsclean2-c%02i.log' % self.cycle, 
                 self.mss.getStrWsclean(), 
                 name=imagename,
-                do_predict=True, 
+                do_predict=predict, 
                 cont=True, 
                 parallel_gridding=4,
                 niter=1000000, 
