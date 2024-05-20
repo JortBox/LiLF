@@ -10,9 +10,11 @@ import matplotlib.pyplot as plt
 import astropy.units as u
 import numpy as np
 
-import os, sys, pickle
+import os, sys, pickle, glob
 import targets
-from analysis import *
+import analysis as asis
+from analysis import Source3C
+from calibration import extended_targets, very_extended_targets
 
 import numpy as np
 import astropy.units as u
@@ -25,8 +27,6 @@ plt.rc('font', family='serif')
 
 
 def restructure_fits(path: str, size: int = 200):
-    
-    
     oldhdul = fits.open(path)
     oldhdu: fits.PrimaryHDU = oldhdul[0] # type: ignore
 
@@ -57,12 +57,70 @@ def restructure_fits(path: str, size: int = 200):
     return np.max(hdu.data)
 
 
+def plot_SED(source: Source3C):
+    fontsize = 18
+    fluxes = []
+    #for i in range(1,5):
+    #    source.set_data(f"{DATA_DIR}/{source.name}/img/img-core-0{i}-MFS-image.fits")
+    #    fluxes.append(asis.measure_flux(source.path, threshold=9))
+    #    source.SED.insert(fluxes[-1]*u.Jy)
+    
+    source.set_data(f"{DATA_DIR}/{source.name}/img/img-core-02-MFS-image.fits")
+    source.SED.insert(asis.measure_flux(source.path, threshold=9)*u.Jy)
+    
+    asis.query_fluxes_ned(source)
+
+    plt.errorbar(
+        source.SED["58MHz"].freq, 
+        source.SED["58MHz"].flux, 
+        yerr=0.1*source.SED["58MHz"].flux, 
+        color='red', 
+        label="Measurement", 
+        fmt="^"
+    )
+
+    spec = source.SED
+    try:
+        plt.errorbar(
+            spec.freq[spec.refcode=="2007AJ....134.1245C"], 
+            spec.flux[spec.refcode=="2007AJ....134.1245C"], 
+            yerr=spec.error[spec.refcode=="2007AJ....134.1245C"], 
+            color='dodgerblue', 
+            label=f"VLA ({spec.freq[spec.refcode=='2007AJ....134.1245C'][0]})", 
+            fmt="."
+        )
+    except:
+        pass
+    try: 
+        plt.errorbar(
+            spec.freq[spec.refcode=="2018AJ....155..188L"], 
+            spec.flux[spec.refcode=="2018AJ....155..188L"], 
+            yerr=spec.error[spec.refcode=="2018AJ....155..188L"], 
+            color='black', 
+            label=f"NVSS ({spec.freq[spec.refcode=='2018AJ....155..188L'][0]})", 
+            fmt="."
+        )
+    except:
+        pass
+    source.SED.plot(
+        show=False, fmt=".", label="NED", alpha=0.5, color='gray', zorder=0
+    )
+
+    plt.title(source.name)
+    plt.xlabel("$\\nu$ [MHz]", fontsize=fontsize)
+    plt.ylabel("Flux density [Jy]", fontsize=fontsize)
+    plt.legend(frameon=False, loc="lower left")
+    plt.savefig("plots_sed/" + source.name + "_SED.png")
+    plt.clf()
+    #plt.show()
+
+
 def plot_optical(source: Source3C):
     gc = aplpy.make_rgb_image(["/data/m82-infrared.fits","/data/m82-red.fits","/data/m82-blue.fits"], "m82-rgb.png", stretch_r='log', stretch_g='log', stretch_b='log')
     
 def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size = None, annotation_color="white"):
     #levels = np.array([1.6**i for i in range(2,20)]) * source.rms
-    levels = np.array([5, 10, 50, 75,100, 200]) * source.rms
+    levels = np.array([5, 50, 100, 200]) * source.rms
     print(levels)
     
     fontsize = 18
@@ -70,18 +128,17 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
         suffix = "_" + suffix
     
     cosmo = FlatLambdaCDM(H0=70, Om0=0.3, Tcmb0=2.725)
-    scale = cosmo.kpc_proper_per_arcmin(source.z)  
+    scale = cosmo.kpc_proper_per_arcmin(source.z)
     
     if size is None:
         size = (1.5*u.Mpc / scale).to(source.pixScale).value
 
-    
     max = restructure_fits(source.path, size = size)
     
     gc = aplpy.FITSFigure('test.fits', subplot=[0., 0., .72, .8])
 
-    gc.show_colorscale(cmap='inferno', vmin=vmin, vmax=vmax*max, stretch='log', vmid=1.5*vmin)
-    gc.show_contour('test.fits', colors=annotation_color, levels=levels, alpha=0.7, linewidths=1) # type: ignore
+    gc.show_colorscale(cmap='inferno', vmin=vmin, vmax=vmax*max, stretch='log', vmid=5*vmin)
+    gc.show_contour('test.fits', colors=annotation_color, levels=levels, alpha=0.4, linewidths=1) # type: ignore
 
     gc.add_beam(color="none", edgecolor=annotation_color)
     gc.add_label(0.495, 0.94, source.name, relative=True, size=25, color=annotation_color)
@@ -91,30 +148,51 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     gc.colorbar.set_axis_label_font(size=fontsize)
     gc.colorbar.set_font(size=fontsize)
     
-    display_scale = 10.0
-    #gc.add_scalebar((display_scale*u.kpc/scale).to(u.deg).value , color=annotation_color, corner="bottom")
-    #gc.scalebar.set_label(f'{int(display_scale)} kpc')
-    #gc.scalebar.set_font(size=fontsize)
+    display_scale = (size/4 * source.pixScale * scale).to(u.Mpc)
+    if display_scale.value < 1:
+        display_scale = display_scale.to(u.kpc).astype(np.int64)
+        
+    display_scale = display_scale.astype(np.int64)
+        
+    print(display_scale)
+    gc.add_scalebar((display_scale/scale).to(u.deg).value , color=annotation_color, corner="bottom")
+    gc.scalebar.set_label(f'{display_scale.value} {display_scale.unit}')
+    gc.scalebar.set_font(size=fontsize)
 
     gc.tick_labels.set_font(size=fontsize)
     gc.axis_labels.set_font(size=fontsize)
     try:
-        gc.save(f"{source.name}{suffix}.png", dpi=300)
+        gc.save(f"plots/{source.name}{suffix}.png", dpi=300)
     except:
-        gc.save(f"{source.name}{suffix}.png", dpi=150)
+        gc.save(f"plots/{source.name}{suffix}.png", dpi=150)
     
     os.remove('test.fits')
     
 if __name__ == "__main__":
     DATA_DIR = "/data/data/3Csurvey/tgts/"
     
-    catalog = Catalogue3C(["3c231"])
+    all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}*"))]
+    catalog = asis.Catalogue3C(all_targets)
+    #catalog = asis.Catalogue3C(["3c175.1"])
+    
     for source in catalog:
-        source.set_data(f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits")
-        #source.set_data(f"{DATA_DIR}{source.name}/backup-manual/img/img-all-05-MFS-image.fits")
+        try:
+            source.set_data(f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits")
+        except:
+            continue
+        
         size = source_angular_size(source.name, source.path, threshold=5) * u.arcmin
 
-        get_integrated_flux(source, threshold=9)
-        #plot_galaxy(source, vmax=0.005, vmin=-5*source.rms.value, size=2000)
-        plot_galaxy(source, vmax=1.1, vmin=-6.*source.rms.value, size=150)
-        #plot_optical(source)
+        #asis.get_integrated_flux(source, threshold=9)
+        if source.name in extended_targets:
+            size = 800
+        elif source.name in very_extended_targets:
+            size = int(source.data.shape[0]//2)
+        else:
+            size=400
+            
+        #plot_galaxy(source, vmax=1., vmin=-4.*source.rms.value, size=size)
+        try:
+            plot_SED(source)
+        except:
+            print("Failed to plot SED")
