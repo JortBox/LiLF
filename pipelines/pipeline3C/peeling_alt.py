@@ -57,7 +57,7 @@ def clean_peeling(MSs):
     logger.info("copying data to -> *-peel...")
     for measurement in MSs.getListStr():
         os.system('cp -r %s %s' % (measurement, measurement + "-peel") )
-        
+
     lib_util.check_rm("peel-*")
     
     
@@ -141,8 +141,8 @@ def peel_single_source_original(MSs_shift, s, name, peel_region_file):
         "DP3 "
         + parset_dir
         + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
-            sol.h5parm=$pathMS/calGp.h5 sol.mode=scalar \
-            sol.solint=10 sol.smoothnessconstraint=1e6",
+            sol.h5parm=$pathMS/calGp.h5 sol.mode=scalarphase \
+            sol.solint=50 sol.smoothnessconstraint=2e6",
         log="$nameMS_solGp-peel.log",
         commandType="DP3",
     )
@@ -344,8 +344,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
     MSs = MeasurementSets(
         glob.glob(f'*.MS*peel'), 
         s, 
-        check_flags=False, 
-        check_sun=True
+        check_flags=False
     )  
   
     # get model for entire sub-field
@@ -385,7 +384,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             add_model(MSs)
             
             if do_test:
-                image_quick(MSs, f'peel-{name}/test-add-{name}')
+                image_quick(MSs, f'peel-{name}/test-add-{name}', predict=False)
             
             lib_util.check_rm("mss-dir")
             os.makedirs("mss-dir")
@@ -395,7 +394,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             MSs.run(
                 f"DP3 {parset_dir}/DP3-shiftavg.parset msin=$pathMS \
                     msout=mss-dir/$nameMS.MS msin.datacolumn=CORRECTED_DATA \
-                    msout.datacolumn=DATA avg.timestep=8 avg.freqstep=16 \
+                    msout.datacolumn=DATA avg.timestep=8 avg.freqstep=8 \
                     shift.phasecenter=[{peel_source['RA']}deg,{peel_source['DEC']}deg]",
                 log="$nameMS_shift.log",
                 commandType="DP3",
@@ -578,7 +577,7 @@ if __name__ == "__main__":
     TARGET = os.getcwd().split("/")[-1]
     
     original_mss = MeasurementSets(
-        glob.glob(f'*.MS-phaseup'), 
+        glob.glob(f'*.MS-phaseup-final'), 
         SCHEDULE, 
         check_flags=False, 
         check_sun=True
