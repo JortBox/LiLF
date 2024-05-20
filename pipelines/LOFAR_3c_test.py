@@ -350,7 +350,7 @@ def demix(MSs: MeasurementSets):
             )
 
 
-def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
+def predict(MSs: MeasurementSets, doBLsmooth:bool = False) -> None:
     Logger.info('Preparing model...')
     sourcedb = 'tgts.skydb'
     #if not os.path.exists(sourcedb):
@@ -576,42 +576,75 @@ def do_peel():
         cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
         cal.clean(f'img/img-after-peeling')
         
-def test_clean():
-    MSs = MeasurementSets(glob.glob(f'*concat_all.MS-phaseup'), SCHEDULE)
+def demix3C(MSs, target: str):
+    skymodel = target + ".skymodel"
     
-    masking = pipeline.make_beam_region(MSs, TARGET)
-    calibration = pipeline.SelfCalibration(
-        MSs, schedule=SCHEDULE, mask=masking, stats="all"
+    Logger.info('Demixing...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-demix.parset msin=$pathMS msout=$pathMS \
+            demixer.skymodel={skymodel} \
+            demixer.instrumentmodel=$pathMS/instrument_demix \
+            demixer.subtractsources=[{target}]',
+        log='$nameMS_demix.log', 
+        commandType='DP3'
+    )
+        
+def demix_3C_test():    
+    MSs_orig = MeasurementSets(
+        glob.glob(f'*.MS-phaseup-final'), 
+        SCHEDULE, 
+        check_flags=False
+    )  
+    
+    for measurement in MSs_orig.getListStr():
+        os.system('cp -r %s %s' % (measurement, measurement + "-demix") )
+    
+    MSs = MeasurementSets(
+        glob.glob(f'*.MS-phaseup-final-demix'), 
+        SCHEDULE, 
+        check_flags=False
     )
     
-    Logger.info('Correcting CS...')
-    fulljones_solution = sorted(glob.glob("cal-Ga*all-ampnorm.h5"))
-    solution = sorted(glob.glob("cal-Gp*all-ampnorm.h5"))
+    predict(MSs)
     
-    if len(solution) != 0:
-        Logger.info(f"correction Gain-scalar of {solution[-1]}")
-        # correcting DATA -> CORRECTED_DATA
-        calibration.mss.run(
-            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
-                cor.parmdb={solution[-1]} cor.correction=phase000',
-            log='$nameMS_corPH-all.log', 
-            commandType='DP3'
-        )
+    # make beam region files
+    masking = pipeline.make_beam_region(MSs, TARGET)
+    cal = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, mask=masking)
+    cal.clean(f'img/img-pre-demix', predict=False)
     
-    if len(fulljones_solution) != 0:
-        Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
-        # correcting CORRECTED_DATA -> CORRECTED_DATA
-        calibration.mss.run(
-            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
-                cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
-                cor.soltab=[amplitude000,phase000]',
-            log='$nameMS_corAMPPHslow-all.log', 
-            commandType='DP3'
-        )
+    demix3C(MSs, "3c34")
     
-    imagename = f'img/img-clean-test'
-    calibration.clean(imagename)
-    calibration.prepare_next_iter(imagename, 0, 0)
+    cal.clean(f'img/img-post-demix', predict=False)
+    
+    
+    
+    
+    
+def image_quick(measurements: MeasurementSets, imagename: str, data_column: str="CORRECTED_DATA", predict: bool=True):
+    Logger.info(f'imaging {imagename}... ')
+    lilf.run_wsclean(
+        SCHEDULE,
+        "wsclean-peel.log",
+        measurements.getStrWsclean(),
+        do_predict=predict,
+        name=imagename,
+        data_column=data_column,
+        size=512,
+        parallel_gridding=4,
+        baseline_averaging="",
+        scale="2.5arcsec",
+        niter=100000,
+        no_update_model_required="",
+        minuv_l=30,
+        mgain=0.4,
+        nmiter=0,
+        auto_threshold=5,
+        local_rms="",
+        local_rms_method="rms-with-min",
+        join_channels="",
+        fit_spectral_pol=2,
+        channels_out=2,
+    )
 
 
 if __name__ == "__main__":
@@ -639,7 +672,8 @@ if __name__ == "__main__":
         os.makedirs(DATA_DIR+"/data")
         os.system(f"mv {DATA_DIR}/*.MS {DATA_DIR}/data/")
     
-    main(args) 
-    #test_clean() 
-    #do_peel()      
+    #main(args) 
+    ##test_clean() 
+    #do_peel()  
+    demix_3C_test()    
     

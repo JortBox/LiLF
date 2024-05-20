@@ -240,7 +240,6 @@ def set_model_to_peel_source(MSs, peel_source, imagename, make_region: bool =Tru
     
     if make_region:
         # make a region
-        
         sh = Shape("circle", None)
         sh.coord_format = "fk5"  # type: ignore
         sh.coord_list = [peel_source["RA"], peel_source["DEC"], 0.075] # ra, dec, diam # type: ignore
@@ -413,7 +412,8 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             if original:
                 peel_single_source_original(MSs_shift, s, name, peel_region_file)
             else:
-                peel_single_source(MSs_shift, s, name, peel_region_file, do_test=True)
+                pass
+                #peel_single_source(MSs_shift, s, name, peel_region_file, do_test=True)
     
     
     
