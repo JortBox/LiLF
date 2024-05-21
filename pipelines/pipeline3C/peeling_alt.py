@@ -57,7 +57,7 @@ def clean_peeling(MSs):
     logger.info("copying data to -> *-peel...")
     for measurement in MSs.getListStr():
         os.system('cp -r %s %s' % (measurement, measurement + "-peel") )
-        
+
     lib_util.check_rm("peel-*")
     
     
@@ -127,6 +127,34 @@ def get_field_model(MSs: MeasurementSets, region):
         channels_out=2,
     )
 
+def peel_3c(MSs_shift, s, name, peel_region_file):
+    # image
+    logger.info("Peel - Image...")
+    imagename_peel = "peel-%s/img_%s" % (name, name)
+    
+    #image and predict source to peel
+    image_quick(MSs_shift, imagename_peel, data_column="DATA", predict=False)
+    
+    sourcedb="3c34.skymodel"
+    # predict in MSs
+    logger.info("Peel - Predict final...")
+    # Predict MODEL_DATA
+    logger.info('Predict (DP3)...')
+    MSs_shift.run(
+        f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb}', 
+        log='$nameMS_pre.log', 
+        commandType='DP3'
+    )
+    
+    image_quick(MSs_shift, f'peel-{name}/test-pre-subtract-{name}', predict=True, data_column="DATA")
+
+    subtract_model(MSs_shift, col_in="DATA", col_out="DATA")
+
+    image_quick(MSs_shift, f'peel-{name}/test-post-subtract-{name}', predict=True, data_column="DATA")
+
+
+    
+
 def peel_single_source_original(MSs_shift, s, name, peel_region_file):
     # image
     logger.info("Peel - Image...")
@@ -141,8 +169,8 @@ def peel_single_source_original(MSs_shift, s, name, peel_region_file):
         "DP3 "
         + parset_dir
         + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
-            sol.h5parm=$pathMS/calGp.h5 sol.mode=scalar \
-            sol.solint=10 sol.smoothnessconstraint=1e6",
+            sol.h5parm=$pathMS/calGp.h5 sol.mode=scalarphase \
+            sol.solint=10 sol.smoothnessconstraint=2e6",
         log="$nameMS_solGp-peel.log",
         commandType="DP3",
     )
@@ -184,8 +212,10 @@ def peel_single_source_original(MSs_shift, s, name, peel_region_file):
         log="$nameMS_corrupt.log",
         commandType="DP3",
     )
+
+    #subtract_model(MSs_shift, col_in="DATA", col_out="DATA")
     
-    image_quick(MSs_shift, f'peel-{name}/test-corrupted-model-{name}', predict=False)
+    image_quick(MSs_shift, f'peel-{name}/test-corrupted-model-{name}', predict=True, data_column="DATA")
     
     '''
     # TEMPORARY CALL
@@ -269,7 +299,7 @@ def set_model_to_peel_source(MSs, peel_source, imagename, make_region: bool =Tru
     # predict the source to peel
     logger.info("Peel - Predict init...")
     SCHEDULE.add(
-        f"wsclean -predict -name {name_test} \
+        f"wsclean -predict -name {imagename_peel} \
             -j {SCHEDULE.max_processors} -channels-out 2 -reorder \
             -parallel-reordering 4 {MSs.getStrWsclean()}",
         log="wsclean-pre.log",
@@ -344,8 +374,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
     MSs = MeasurementSets(
         glob.glob(f'*.MS*peel'), 
         s, 
-        check_flags=False, 
-        check_sun=True
+        check_flags=False
     )  
   
     # get model for entire sub-field
@@ -379,13 +408,13 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             os.system("mkdir peel-%s" % name)
 
             # predict and blank model to the source to peel
-            set_model_to_peel_source(MSs, peel_source, imagename_peel)
+            set_model_to_peel_source(MSs, peel_source, "img/"+IMAGENAME.split("/")[-1])
             
             # add the source to peel back
             add_model(MSs)
             
             if do_test:
-                image_quick(MSs, f'peel-{name}/test-add-{name}')
+                image_quick(MSs, f'peel-{name}/test-add-{name}', predict=False)
             
             lib_util.check_rm("mss-dir")
             os.makedirs("mss-dir")
@@ -395,7 +424,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             MSs.run(
                 f"DP3 {parset_dir}/DP3-shiftavg.parset msin=$pathMS \
                     msout=mss-dir/$nameMS.MS msin.datacolumn=CORRECTED_DATA \
-                    msout.datacolumn=DATA avg.timestep=8 avg.freqstep=16 \
+                    msout.datacolumn=DATA avg.timestep=8 avg.freqstep=8 \
                     shift.phasecenter=[{peel_source['RA']}deg,{peel_source['DEC']}deg]",
                 log="$nameMS_shift.log",
                 commandType="DP3",
@@ -410,7 +439,8 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             
             peel_region_file = f"peel-{name}/{name}.reg"
             if original:
-                peel_single_source_original(MSs_shift, s, name, peel_region_file)
+                #peel_single_source_original(MSs_shift, s, name, peel_region_file)
+                peel_3c(MSs_shift, s, name, peel_region_file)
             else:
                 pass
                 #peel_single_source(MSs_shift, s, name, peel_region_file, do_test=True)
