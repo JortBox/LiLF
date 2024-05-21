@@ -674,6 +674,6 @@ if __name__ == "__main__":
     
     #main(args) 
     ##test_clean() 
-    #do_peel()  
-    demix_3C_test()    
+    do_peel()  
+    #demix_3C_test()    
     

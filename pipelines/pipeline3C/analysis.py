@@ -68,7 +68,7 @@ class SED(object):
         self.fluxes_dict = dict()
         self.target = target
     
-    def __getitem__(self, item):# -> Flux|list[Flux]:
+    def __getitem__(self, item) -> Flux|list[Flux]:
         if type(item) == str:
             index = self.fluxes_dict[item]
             if type(index) is int:

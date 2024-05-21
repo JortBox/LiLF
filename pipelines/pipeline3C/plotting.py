@@ -46,13 +46,13 @@ def restructure_fits(path: str, size: int = 200):
     if size == -1:
         hdu = fits.PrimaryHDU(oldhdu.data[0,0], header=oldhdu.header) # type: ignore
         hdu.writeto('test.fits', overwrite=True)
-        return np.max(hdu.data)
+        return np.max(np.asarray(hdu.data))
     
     size = int(np.round(size/2))
     nax = np.asarray(oldhdu.data.shape[2:])//2 # type: ignore
     hdu = fits.PrimaryHDU(oldhdu.data[0,0,nax[0]-size:nax[0]+size,nax[1]-size:nax[1]+size], header=oldhdu.header) # type: ignore
     hdu.writeto('test.fits', overwrite=True)
-    return np.max(hdu.data)
+    return np.max(np.asarray(hdu.data))
 
 
 def plot_SED(source: Source3C):
@@ -134,6 +134,11 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     max = restructure_fits(source.path, size = size)
     
     gc = aplpy.FITSFigure('test.fits', subplot=[0., 0., .72, .8])
+    
+    if vmin is None:
+        vmin = -4.*source.rms.value
+    if vmax is None:
+        vmax = 1.
 
     gc.show_colorscale(cmap='inferno', vmin=vmin, vmax=vmax*max, stretch='log', vmid=5*vmin)
     gc.show_contour('test.fits', colors=annotation_color, levels=levels, alpha=0.4, linewidths=1) # type: ignore
