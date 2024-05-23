@@ -185,6 +185,8 @@ def peel_single_source_original(MSs_shift, s, name, peel_region_file):
         commandType="DP3",
     )
     
+    subtract_model(MSs_shift, col_in="DATA", col_out="DATA")
+    
     image_quick(MSs_shift, f'peel-{name}/test-corrupted-model-{name}', predict=False)
     
     '''
@@ -269,7 +271,7 @@ def set_model_to_peel_source(MSs, peel_source, imagename, make_region: bool =Tru
     # predict the source to peel
     logger.info("Peel - Predict init...")
     SCHEDULE.add(
-        f"wsclean -predict -name {name_test} \
+        f"wsclean -predict -name {imagename_peel} \
             -j {SCHEDULE.max_processors} -channels-out 2 -reorder \
             -parallel-reordering 4 {MSs.getStrWsclean()}",
         log="wsclean-pre.log",
