@@ -6,6 +6,10 @@ import lsmtool #type: ignore
 import numpy as np
 import argparse
 
+from astroquery.ipac.ned import Ned
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+
 #from argparse import ArgumentParser
 sys.path.append("/data/scripts/LiLF")
 
@@ -134,7 +138,44 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
         log='$nameMS_taql.log', 
         commandType='general'
     )
+
+
+def align_phasecenter(MSs: MeasurementSets, timestamp) -> None:
+    phasecenter = MSs.getListObj()[0].getPhaseCentre()
+    phasecenter = SkyCoord(
+        ra=phasecenter[0], 
+        dec=phasecenter[1], 
+        unit=(u.deg, u.deg), 
+        frame='fk4'
+    )
     
+    table = Ned.query_object(TARGET)
+    target_coord = SkyCoord(
+        ra = float(table["RA"]),  # type: ignore
+        dec = float(table["DEC"]),  # type: ignore
+        unit = (u.deg, u.deg), 
+        frame = 'fk4'
+    )
+    del table
+    
+    seperation = phasecenter.separation(target_coord).arcmin
+    
+    if seperation > 5:
+        Logger.info(f"Source is {seperation:.1f} arcmin away from phasecenter. aligning phases to source")
+        MSs.run(
+            f"DP3 {parset_dir}/DP3-shift.parset \
+                msin=$pathMS msout=$pathMS-shift \
+                msin.datacolumn=DATA msout.datacolumn=DATA \
+                shift.phasecenter=[{target_coord.ra.deg}deg,{target_coord.dec.deg}deg]",
+            log="$nameMS_shift.log",
+            commandType="DP3",
+        )
+        
+        return f'{TARGET}_t{timestamp}_concat_all.MS-shift'
+    else:
+        Logger.info(f"Source is {seperation:.1f} arcmin away from phasecenter. No phase shift needed")
+        return f'{TARGET}_t{timestamp}_concat_all.MS'
+
 
 def setup() -> None:
     MSs_list = MeasurementSets( 
@@ -169,11 +210,15 @@ def setup() -> None:
     
             MSs = MeasurementSets([MS_concat_all], SCHEDULE)
             
+            #demix A-team sources if needed
             demix(MSs)
             
             # Correct data from calibrator step (pa, amp, beam, iono)
             correct_from_callibrator(MSs, timestamp)
-
+            
+            #align phases to source if mismatch >5 arcmin
+            MS_concat_all = align_phasecenter(MSs, timestamp)
+            
             # bkp
             Logger.info('Making backup...')
             os.system('cp -r %s %s' % (MS_concat_all, MS_concat_bkp) ) # do not use MS.move here as it resets the MS path to the moved one
@@ -216,7 +261,9 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
         
         assert len(rms_history) == len(ratio_history)
-        if np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
+        if np.argmax(ratio_history) == 0:
+            correct_cycle = 1
+        elif np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
             correct_cycle = - 1
         else:
             correct_cycle = np.argmax(ratio_history) - len(ratio_history)
@@ -441,6 +488,8 @@ def main(args: argparse.Namespace) -> None:
             )   
         except:
             pass
+        
+        print( MSs.getListObj()[0].getPhaseCentre())
 
         if stations != "core": 
             with WALKER.if_todo('phaseupCS ' + stations):
@@ -474,7 +523,7 @@ def main(args: argparse.Namespace) -> None:
             
         elif stations == "all":
             if args.total_cycles_all is None:
-                total_cycles = 14
+                total_cycles = 20
             else:
                 total_cycles = args.total_cycles_all
         else:

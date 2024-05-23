@@ -56,7 +56,7 @@ def restructure_fits(path: str, size: int = 200):
 
 
 def plot_SED(source: Source3C):
-    fontsize = 18
+    fontsize = 15
     fluxes = []
     #for i in range(1,5):
     #    source.set_data(f"{DATA_DIR}/{source.name}/img/img-core-0{i}-MFS-image.fits")
@@ -67,19 +67,21 @@ def plot_SED(source: Source3C):
     source.SED.insert(asis.measure_flux(source.path, threshold=9)*u.Jy)
     
     asis.query_fluxes_ned(source)
+    
+    fig, ax = plt.subplots(figsize=(7,6))
 
-    plt.errorbar(
+    ax.errorbar(
         source.SED["58MHz"].freq, 
         source.SED["58MHz"].flux, 
         yerr=0.1*source.SED["58MHz"].flux, 
         color='red', 
         label="Measurement", 
-        fmt="^"
+        fmt="^",
     )
 
     spec = source.SED
     try:
-        plt.errorbar(
+        ax.errorbar(
             spec.freq[spec.refcode=="2007AJ....134.1245C"], 
             spec.flux[spec.refcode=="2007AJ....134.1245C"], 
             yerr=spec.error[spec.refcode=="2007AJ....134.1245C"], 
@@ -90,7 +92,7 @@ def plot_SED(source: Source3C):
     except:
         pass
     try: 
-        plt.errorbar(
+        ax.errorbar(
             spec.freq[spec.refcode=="2018AJ....155..188L"], 
             spec.flux[spec.refcode=="2018AJ....155..188L"], 
             yerr=spec.error[spec.refcode=="2018AJ....155..188L"], 
@@ -104,12 +106,21 @@ def plot_SED(source: Source3C):
         show=False, fmt=".", label="NED", alpha=0.5, color='gray', zorder=0
     )
 
-    plt.title(source.name)
-    plt.xlabel("$\\nu$ [MHz]", fontsize=fontsize)
-    plt.ylabel("Flux density [Jy]", fontsize=fontsize)
-    plt.legend(frameon=False, loc="lower left")
-    plt.savefig("plots_sed/" + source.name + "_SED.png")
+    ax.annotate(
+        f"{source.display_name}", 
+        (0.45, 0.93), 
+        xycoords='axes fraction', 
+        fontsize=fontsize
+    )
+    #ax.set_title(source.name)
+    ax.set_xlabel("$\\nu$ [MHz]", fontsize=fontsize)
+    ax.set_ylabel("Flux density [Jy]", fontsize=fontsize)
+    ax.tick_params(axis='x', labelsize=fontsize)
+    ax.tick_params(axis='y', labelsize=fontsize)
+    plt.legend(frameon=False, loc="lower left", fontsize=fontsize)
+    plt.savefig("plots_sed/" + source.name + "_SED.png", dpi=300)
     plt.clf()
+    plt.cla()
     #plt.show()
 
 
@@ -170,21 +181,27 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
         gc.save(f"plots/{source.name}{suffix}.png", dpi=150)
     
     os.remove('test.fits')
+    plt.clf()
     
 if __name__ == "__main__":
     DATA_DIR = "/data/data/3Csurvey/tgts/"
     
     all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}*"))]
     catalog = asis.Catalogue3C(all_targets)
-    #catalog = asis.Catalogue3C(["3c175.1"])
+    #catalog = asis.Catalogue3C(["3c296"])
     
     for source in catalog:
+        
+        if source.name in ["3c296"]:
+            continue
+        
         try:
             source.set_data(f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits")
         except:
             continue
         
-        size = source_angular_size(source.name, source.path, threshold=5) * u.arcmin
+        #source.set_data(f"{DATA_DIR}{source.name}/img/img-all-04-MFS-image.fits")
+        #size = source_angular_size(source.name, source.path, threshold=5) * u.arcmin
 
         #asis.get_integrated_flux(source, threshold=9)
         if source.name in extended_targets:
@@ -194,8 +211,8 @@ if __name__ == "__main__":
         else:
             size=400
             
-        #plot_galaxy(source, vmax=1., vmin=-4.*source.rms.value, size=size)
-        try:
-            plot_SED(source)
-        except:
-            print("Failed to plot SED")
+        
+        
+        plot_galaxy(source, vmax=1., vmin=-4.*source.rms.value, size=size)
+        #try: plot_SED(source)
+        #except: print("Failed to plot SED")

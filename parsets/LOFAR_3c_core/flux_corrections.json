@@ -1,0 +1,65 @@
+{
+    "data": [
+        {
+            "refcode": "1969ApJ...157....1K",
+            "correction": 1.18,
+            "freq": 38
+        },{
+            "refcode": "1969ApJ...157....1K",
+            "correction": 1.09,
+            "freq": 178
+        },{
+            "refcode": "1969SvA....12..567A",
+            "correction": 0.94,
+            "freq": 86
+        },{
+            "refcode": "1968AJ.....73..717B",
+            "correction": 1.20,
+            "freq": 10
+        },{
+            "refcode": "1973AJ.....78.1030R",
+            "correction": 1.0,
+            "freq": 10
+        },{
+            "refcode": "1973AJ.....78.1030R",
+            "correction": 1.0,
+            "freq": 22.25
+        },{
+            "refcode": "1969AJ.....74..366R",
+            "correction": 1.15,
+            "freq": 22.25
+        },{
+            "refcode": "1990MNRAS.243..637R",
+            "correction": 1.0,
+            "freq": 38
+        },{
+            "refcode": "1990MNRAS.244..233R",
+            "correction": 1.0,
+            "freq": 38
+        },{
+            "refcode": "1971MNRAS.154P..19S",
+            "correction": 0.9,
+            "freq": 81.5
+        },{
+            "refcode": "1985MNRAS.217..717B",
+            "correction": 1.0,
+            "freq": 151
+        },{
+            "refcode": "1993MNRAS.263...25H",
+            "correction": 1.0,
+            "freq": 151
+        },{
+            "refcode": "1997A&AS..124..259R",
+            "correction": 0.90,
+            "freq": 325
+        },{
+            "refcode": "1970A&AS....1..281C",
+            "correction": 1.0,
+            "freq": 408
+        },{
+            "refcode": "1997BSAO...44...50K",
+            "correction": 1.0,
+            "freq": 960
+        }
+    ]
+}
