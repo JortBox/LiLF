@@ -4,6 +4,7 @@
 import glob, sys, os, pickle
 from astropy.io import fits
 import numpy as np
+import json
 import astropy.units as u
 import matplotlib.pyplot as plt
 
@@ -48,7 +49,11 @@ class Flux(object):
         self.freq = freq
         self.spectral_index = spectral_index
         self.is_manual = manual
+        self.corrected = False
         self.refcode = refcode
+        
+        self.correct_flux(refcode)
+        
         
     def __str__(self) -> str:
         return f"{self.flux} at {self.freq}"
@@ -61,6 +66,20 @@ class Flux(object):
         self.freq = target_freq
         #TODO: new error calc
         return self
+    
+    def correct_flux(self, refcode: str):
+        with open("/local/work/j.boxelaar/scripts/LiLF/parsets/LOFAR_3c_core/flux_corrections.json") as file:
+            corrections = json.load(file)["data"]
+        
+        for correction in corrections:
+            if refcode == correction["refcode"] or self.freq.value == correction["freq"]:
+                self.flux *= correction["correction"]
+                self.corrected = True
+                break
+        
+        del corrections
+        
+    
     
 class SED(object):
     def __init__(self, target: str = "NA"):
@@ -75,10 +94,6 @@ class SED(object):
                 return self.fluxes[index]
             else:
                 return self.fluxes[index[-1]]
-                #fluxes_to_return = list()
-                #for i in index:
-                #    fluxes_to_return.append(self.fluxes[i])
-                #return fluxes_to_return
             
         elif type(item) == int or type(item) == slice:
             return self.fluxes[item]
@@ -145,10 +160,12 @@ class SED(object):
 class Source3C(object):
     def __init__(self, name : str):
         self.name = name
+        self.display_name = name.replace("3c", "3C ")
         self.z = 0
         self.SED = SED(name)
         self._default_rms = False
         self.data_set = False
+        self.dynamic_range = 0
         
     def set_redshift(self, z: float):
         self.z = z
@@ -176,14 +193,19 @@ class Source3C(object):
         self.path = path
         self.data_set = True
         
+        self.dynamic_range = np.max(self.data.value) / np.min(self.data.value)
+        
     def clear_data(self):
         self.data_set = False
         del self.data
+        
+    def clear_sed(self):
+        self.SED = SED(self.name)
     
     @property
     def rms(self) -> Quantity:
-        if not self.data_set:
-            return 0. * u.Jy/self.beam
+        if (not self.data_set) and (not self._default_rms):
+            return 0. * u.Jy
         
         if not self._default_rms:
             self.rms_value = get_rms(self.data.value) * u.Jy/self.beam
@@ -248,7 +270,15 @@ class Catalogue3C(object):
     
     @property
     def diameter(self) -> np.ndarray:
-        return np.array([source.diameter for source in self.sources ])
+        return np.array([source.diameter for source in self.sources])
+    
+    @property
+    def name(self) -> list[str]:
+        return [source.name for source in self.sources]
+    
+    @property
+    def display_name(self) -> list[str]:
+        return [source.display_name for source in self.sources]
     
 
     def __query_objects_vizier(self, targets: list[str]) -> None:
@@ -306,13 +336,15 @@ class Catalogue3C(object):
 
 
 def query_fluxes_ned(source: Source3C, freq_limit = 1.e10 * u.Hz):
-    table = Ned.get_table(source.name, table="photometry")
+    table = Ned.get_table(source.name, table="photometry", sort_by="Frequency")
     
     for item in table:
         flux = item["Flux Density"] # type: ignore
         freq = item["Frequency"] * u.Hz # type: ignore
         error = (item["Lower limit of uncertainty"] + item["Upper limit of uncertainty"])/2 # type: ignore
         
+        if str(flux) == '--':
+                continue
         
         if freq < freq_limit:
             if str(error) == "--":
@@ -321,15 +353,23 @@ def query_fluxes_ned(source: Source3C, freq_limit = 1.e10 * u.Hz):
             if item["Units"] == "milliJy": # type: ignore
                 flux *= u.Jy
                 error *= u.Jy
+                source.SED.insert(flux, freq.to(u.MHz), error, manual=False, refcode=item["Refcode"])
                 
                 
             elif item["Units"] == "W m^-2^ Hz^-1^": # type: ignore
                 continue
             else:
-                flux *= u.Unit(item["Units"]) # type: ignore
-                error *= u.Unit(item["Units"]) # type: ignore
-                
-            source.SED.insert(flux, freq.to(u.MHz), error, manual=False, refcode=item["Refcode"])
+                try:
+                    flux *= u.Unit(item["Units"]) # type: ignore
+                    error *= u.Unit(item["Units"]) # type: ignore
+                    source.SED.insert(flux.to(u.Jy), freq.to(u.MHz), error, manual=False, refcode=item["Refcode"])
+                except ValueError:
+                    print(f"Error: {item['Units']} not recognized")
+                    
+            
+            
+            
+            
             
 
 

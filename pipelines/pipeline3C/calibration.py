@@ -27,7 +27,7 @@ extended_targets = [
     '3c454.3','3c465','3c84'
 ]
 
-very_extended_targets = ['3c138','da240','3c236']
+very_extended_targets = ['3c138','da240','3c236', '3c31']
 
 class SelfCalibration(object):
     def __init__(

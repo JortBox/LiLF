@@ -590,6 +590,8 @@ def demix3C(MSs, target: str):
     )
         
 def demix_3C_test():    
+    lilf.check_rm(f'*.MS-phaseup-final-demix')
+
     MSs_orig = MeasurementSets(
         glob.glob(f'*.MS-phaseup-final'), 
         SCHEDULE, 
@@ -674,6 +676,6 @@ if __name__ == "__main__":
     
     #main(args) 
     ##test_clean() 
-    #do_peel()  
-    demix_3C_test()    
+    do_peel()  
+    #demix_3C_test()    
     

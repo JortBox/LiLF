@@ -127,6 +127,34 @@ def get_field_model(MSs: MeasurementSets, region):
         channels_out=2,
     )
 
+def peel_3c(MSs_shift, s, name, peel_region_file):
+    # image
+    logger.info("Peel - Image...")
+    imagename_peel = "peel-%s/img_%s" % (name, name)
+    
+    #image and predict source to peel
+    image_quick(MSs_shift, imagename_peel, data_column="DATA", predict=False)
+    
+    sourcedb="3c34.skymodel"
+    # predict in MSs
+    logger.info("Peel - Predict final...")
+    # Predict MODEL_DATA
+    logger.info('Predict (DP3)...')
+    MSs_shift.run(
+        f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb}', 
+        log='$nameMS_pre.log', 
+        commandType='DP3'
+    )
+    
+    image_quick(MSs_shift, f'peel-{name}/test-pre-subtract-{name}', predict=True, data_column="DATA")
+
+    subtract_model(MSs_shift, col_in="DATA", col_out="DATA")
+
+    image_quick(MSs_shift, f'peel-{name}/test-post-subtract-{name}', predict=True, data_column="DATA")
+
+
+    
+
 def peel_single_source_original(MSs_shift, s, name, peel_region_file):
     # image
     logger.info("Peel - Image...")
@@ -142,7 +170,7 @@ def peel_single_source_original(MSs_shift, s, name, peel_region_file):
         + parset_dir
         + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
             sol.h5parm=$pathMS/calGp.h5 sol.mode=scalarphase \
-            sol.solint=50 sol.smoothnessconstraint=2e6",
+            sol.solint=10 sol.smoothnessconstraint=2e6",
         log="$nameMS_solGp-peel.log",
         commandType="DP3",
     )
@@ -380,7 +408,7 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             os.system("mkdir peel-%s" % name)
 
             # predict and blank model to the source to peel
-            set_model_to_peel_source(MSs, peel_source, imagename_peel)
+            set_model_to_peel_source(MSs, peel_source, "img/"+IMAGENAME.split("/")[-1])
             
             # add the source to peel back
             add_model(MSs)
@@ -411,7 +439,8 @@ def peel(original_mss: MeasurementSets, s: lib_util.Scheduler, peel_max: int = 2
             
             peel_region_file = f"peel-{name}/{name}.reg"
             if original:
-                peel_single_source_original(MSs_shift, s, name, peel_region_file)
+                #peel_single_source_original(MSs_shift, s, name, peel_region_file)
+                peel_3c(MSs_shift, s, name, peel_region_file)
             else:
                 pass
                 #peel_single_source(MSs_shift, s, name, peel_region_file, do_test=True)
@@ -579,7 +608,7 @@ if __name__ == "__main__":
     TARGET = os.getcwd().split("/")[-1]
     
     original_mss = MeasurementSets(
-        glob.glob(f'*.MS-phaseup-final'), 
+        glob.glob(f'*.MS-phaseup'), 
         SCHEDULE, 
         check_flags=False, 
         check_sun=True
