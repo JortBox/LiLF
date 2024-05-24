@@ -475,11 +475,9 @@ def clean_specific(mode: str) -> None :
     
 def main(args: argparse.Namespace) -> None:
     stopping=False
-    #with WALKER.if_todo('setup'):
-        #set up corected data
-    setup() 
-    
     for stations in args.stations:
+        setup()
+        
         try:
             MSs = MeasurementSets(
                 glob.glob(f'*concat_{stations}.MS'), 
@@ -488,8 +486,6 @@ def main(args: argparse.Namespace) -> None:
             )   
         except:
             pass
-        
-        print( MSs.getListObj()[0].getPhaseCentre())
 
         if stations != "core": 
             with WALKER.if_todo('phaseupCS ' + stations):
