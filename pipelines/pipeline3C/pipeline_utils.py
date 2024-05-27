@@ -95,8 +95,8 @@ def maximum_station_diameter(source_angular_diameter: float, central_freq: float
     Returns:
         float: maximum station diameter in meters
     """
-    central_freq *= u.MHz
-    source_angular_diameter = (source_angular_diameter * u.arcmin).to(u.rad)
+    central_freq *= u.MHz # type: ignore
+    source_angular_diameter = (source_angular_diameter * u.arcmin).to(u.rad) # type: ignore
     factor = alpha1 * (const.c / central_freq) * (- np.log(amp_fraction) / np.log(2))**0.5 # type: ignore
 
     return (factor / source_angular_diameter).to(u.m / u.rad).value

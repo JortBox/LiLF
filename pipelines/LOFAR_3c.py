@@ -140,7 +140,7 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
     )
 
 
-def align_phasecenter(MSs: MeasurementSets, timestamp) -> None:
+def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
     phasecenter = MSs.getListObj()[0].getPhaseCentre()
     phasecenter = SkyCoord(
         ra=phasecenter[0], 
@@ -159,14 +159,14 @@ def align_phasecenter(MSs: MeasurementSets, timestamp) -> None:
     del table
     
     seperation = phasecenter.separation(target_coord).arcmin
-    
-    if seperation > 5:
+
+    if seperation > 5: #type: ignore
         Logger.info(f"Source is {seperation:.1f} arcmin away from phasecenter. aligning phases to source")
         MSs.run(
             f"DP3 {parset_dir}/DP3-shift.parset \
                 msin=$pathMS msout=$pathMS-shift \
                 msin.datacolumn=DATA msout.datacolumn=DATA \
-                shift.phasecenter=[{target_coord.ra.deg}deg,{target_coord.dec.deg}deg]",
+                shift.phasecenter=[{target_coord.ra.deg}deg,{target_coord.dec.deg}deg]", #type: ignore
             log="$nameMS_shift.log",
             commandType="DP3",
         )
