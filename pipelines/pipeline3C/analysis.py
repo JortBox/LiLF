@@ -52,8 +52,10 @@ class Flux(object):
         self.corrected = False
         self.refcode = refcode
         
-        self.correct_flux(refcode)
-        
+        try:
+            self.correct_flux(refcode)
+        except FileNotFoundError:
+            print("No flux corrections file found.")
         
     def __str__(self) -> str:
         return f"{self.flux} at {self.freq}"

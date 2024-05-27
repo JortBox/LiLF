@@ -129,8 +129,8 @@ def plot_optical(source: Source3C):
     
 def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size = None, annotation_color="white"):
     #levels = np.array([1.6**i for i in range(2,20)]) * source.rms
-    levels = np.array([5, 50, 100, 200]) * source.rms
-    print(levels)
+    levels = np.array([5, 10, 50, 100, 200]) * source.rms
+    #print(levels)
     
     fontsize = 18
     if suffix != "":
@@ -188,22 +188,18 @@ if __name__ == "__main__":
     
     all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}*"))]
     catalog = asis.Catalogue3C(all_targets)
-    #catalog = asis.Catalogue3C(["3c296"])
     
     for source in catalog:
-        
         if source.name in ["3c296"]:
             continue
         
-        try:
-            source.set_data(f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits")
-        except:
+        path = f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits"
+        if os.path.exists(path):
+            source.set_data(path) 
+        else:
+            print(f"Failed to plot {source.name}")
             continue
         
-        #source.set_data(f"{DATA_DIR}{source.name}/img/img-all-04-MFS-image.fits")
-        #size = source_angular_size(source.name, source.path, threshold=5) * u.arcmin
-
-        #asis.get_integrated_flux(source, threshold=9)
         if source.name in extended_targets:
             size = 800
         elif source.name in very_extended_targets:
@@ -211,8 +207,7 @@ if __name__ == "__main__":
         else:
             size=400
             
-        
-        
         plot_galaxy(source, vmax=1., vmin=-4.*source.rms.value, size=size)
+        
         #try: plot_SED(source)
         #except: print("Failed to plot SED")

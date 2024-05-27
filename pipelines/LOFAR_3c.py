@@ -202,7 +202,7 @@ def setup() -> None:
             SCHEDULE.add(
                 f'DP3 {parset_dir}/DP3-avg.parset msin=\"{str(mss_toconcat)}\" \
                     msin.baseline="*&" msout={MS_concat_all} avg.freqstep=1 \
-                    avg.timestep=2',
+                    avg.timestep=1',
                 log=MS_concat_all+'_avg.log', 
                 commandType='DP3'
             )
@@ -408,8 +408,8 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
     decdeg = phasecentre[1]
     
     if TARGET in ["3c196", "3c380", "3c295"]:
-        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/models/calib-simple.skydb {sourcedb}")
-        os.system(f"cp /net/voorrijn/data2/boxelaar/scripts/LiLF/models/calib-simple.skymodel tgts.skymodel")
+        os.system(f"cp /data/scripts/LiLF/models/calib-simple.skydb {sourcedb}")
+        os.system(f"cp /data/scripts/LiLF/models/calib-simple.skymodel tgts.skymodel")
         calname = MSs.getListObj()[0].getNameField()
         
         # Predict MODEL_DATA
@@ -454,7 +454,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
         # Smooth DATA -> DATA
         Logger.info('BL-based smoothing...')
         MSs.run(
-            '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+            '/data/scripts/LiLF/scripts/BLsmooth_pol.py\
                 -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
             log='$nameMS_smooth1.log', 
             commandType='python'
@@ -568,8 +568,13 @@ def main(args: argparse.Namespace) -> None:
                 #calibration.empty_clean(f"img/img-empty-c{cycle}")
                 
                 imagename = f'img/img-{stations}-{cycle:02d}'
-                calibration.clean(imagename)
-                rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
+                try:
+                    calibration.clean(imagename)
+                    rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
+                except RuntimeError:
+                    Logger.error(f"Failed to clean {imagename}")
+                    rms_noise_pre, mm_ratio_pre, stopping = np.inf, 0, True
+                    break
                 
             if stopping or cycle == calibration.stop:
             #    Logger.info("Start Peeling")                

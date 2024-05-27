@@ -24,7 +24,7 @@ extended_targets = [
     #'3c31',
     '3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
-    '3c454.3','3c465','3c84'
+    '3c454.3','3c465','3c84', '4c73.08', 'ngc6109'
 ]
 
 very_extended_targets = ['3c138','da240','3c236', '3c31']
@@ -51,7 +51,7 @@ class SelfCalibration(object):
             self.solint_amp = lib_util.Sol_iterator([200,100,50,10])
             self.solint_ph = lib_util.Sol_iterator([1])
         else:
-            self.solint_amp = lib_util.Sol_iterator([200,100,50])
+            self.solint_amp = lib_util.Sol_iterator([400, 200,100,50])
             self.solint_ph = lib_util.Sol_iterator([10,5,1])
         
         self.doslow = doslow
@@ -403,12 +403,12 @@ class SelfCalibration(object):
         elif TARGET in extended_targets:
             kwargs1 = {
                 'weight': 'briggs -0.7', 
-                'multiscale_scale_bias':0.5, 
+                'multiscale_scale_bias':0.6, 
                 #'taper_gaussian': '25arcsec'
             }
             kwargs2 = {
                 'weight': 'briggs -0.7',
-                'multiscale_scale_bias':0.5,  
+                'multiscale_scale_bias':0.6,  
                 #'taper_gaussian': '25arcsec', 
                 'multiscale_scales': '0,15,30,60,120,240'
             }
