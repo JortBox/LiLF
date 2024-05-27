@@ -277,7 +277,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         print(final_cycle_sol, final_cycle_fj)
         print(0 > final_cycle_sol >= final_cycle_fj)
 
-        if final_cycle_sol >= final_cycle_fj > 0:
+        if final_cycle_sol >= final_cycle_fj >= 0:
             Logger.info(f"correction Gain-scalar of {solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -287,9 +287,11 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                 commandType='DP3'
             )
             data_in = "CORRECTED_DATA"
+        else:
+            Logger.warning(f"No phase Core corrections found. Phase-up not recommended")
         
         
-        if final_cycle_fj >= final_cycle_sol > 0:
+        if final_cycle_fj >= final_cycle_sol >= 0:
             Logger.info(f"Correction Gain of {fulljones_solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -300,10 +302,8 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                 commandType='DP3'
             )
             data_in = "CORRECTED_DATA"
-        
-  
         else:
-            Logger.warning(f"No Core corrections found. Phase-up not recommended")
+            Logger.warning(f"No fulljones Core corrections found. Phase-up not recommended")
         
         if do_test:
             run_test(MSs)
@@ -574,6 +574,8 @@ def main(args: argparse.Namespace) -> None:
                 except RuntimeError:
                     Logger.error(f"Failed to clean {imagename}")
                     rms_noise_pre, mm_ratio_pre, stopping = np.inf, 0, True
+                    calibration.rms_history.append(rms_noise_pre)
+                    calibration.ratio_history.append(mm_ratio_pre)
                     break
                 
             if stopping or cycle == calibration.stop:

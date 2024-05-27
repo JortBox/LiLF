@@ -131,7 +131,7 @@ class SelfCalibration(object):
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalarphase \
                     sol.h5parm=$pathMS/calGph-{self.stats}.h5 \
                     sol.modeldatacolumns=[{model_in}] \
-                    sol.solint={solint} sol.smoothnessconstraint=1e6',
+                    sol.solint={solint} ', # sol.smoothnessconstraint=1e6
                 log=f'$nameMS_solGph-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
@@ -433,6 +433,7 @@ class SelfCalibration(object):
         if self.stats == "core":
             kwargs1["size"] = 500; kwargs1["scale"] = "50.0arcsec" # type: ignore
             kwargs2["size"] = 500; kwargs2["scale"] = "50.0arcsec" # type: ignore
+            kwargs2["weight"] = "briggs -0.8" # type: ignore
         
         print("kwargs1, kwargs2")   
         print(kwargs1)

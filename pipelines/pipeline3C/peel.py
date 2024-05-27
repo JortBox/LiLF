@@ -20,12 +20,22 @@ def image_quick(
     imagename: str, 
     data_column: str="CORRECTED_DATA",
     predict: bool=True,
-    empty: bool = False
+    empty: bool = False,
+    wide=False
 ):
     if empty:
         niter = 0
     else:
         niter = 100000
+        
+    if wide:
+        size = 2500
+        scale = "10arcsec"
+        taper_gaussian = "30arcsec"
+    else:
+        size = 512
+        scale = "2.5arcsec"
+        taper_gaussian = "2.5arcsec"
         
     logger.info(f'imaging {imagename}... ')
     lib_util.run_wsclean(
@@ -35,10 +45,10 @@ def image_quick(
         do_predict=predict,
         name=imagename,
         data_column=data_column,
-        size=512,
+        size=size,
         parallel_gridding=4,
         baseline_averaging="",
-        scale="2.5arcsec",
+        scale=scale,
         niter=niter,
         no_update_model_required="",
         minuv_l=30,
@@ -224,8 +234,8 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             "DP3 "
             + parset_dir
             + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
-                sol.h5parm=$pathMS/calGp.h5 sol.mode=scalarphase \
-                sol.solint=10 sol.smoothnessconstraint=1e6",
+                sol.h5parm=$pathMS/calGp-peel.h5 sol.mode=scalarphase \
+                sol.solint=1 sol.smoothnessconstraint=1e6",
             log="$nameMS_solGp-peel.log",
             commandType="DP3",
         )
@@ -233,23 +243,34 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
         lib_util.run_losoto(
             msets.scheduler,
             f"Gp-peel_{name}",
-            [ms + "/calGp.h5" for ms in msets.getListStr()],
+            [ms + "/calGp-peel.h5" for ms in msets.getListStr()],
             [
                 parset_dir + "/losoto-plot2d.parset",
                 parset_dir + "/losoto-plot.parset",
             ],
             plots_dir=f"peel-{name}",
         )
+        
+        logger.info('Correction PH...')
+        command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
+            cor.parmdb=cal-Gp-peel_{name}.h5 cor.correction=phase000' 
+        msets.run(
+            command, 
+            log=f'$nameMS_corGph-peel-{name}.log', 
+            commandType='DP3'
+        )
         return f"cal-Gp-peel_{name}.h5"
+    
+    
     
     elif mode == "fulljones":
         logger.info("Peel - Calibrate fulljones...")
         msets.run(
             "DP3 "
             + parset_dir
-            + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
+            + "/DP3-solG.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
                 sol.h5parm=$pathMS/calGa.h5 sol.mode=fulljones \
-                sol.solint=50 sol.smoothnessconstraint=2e6",
+                sol.solint=50 ",
             log="$nameMS_solGa-peel.log",
             commandType="DP3",
         )
@@ -259,11 +280,22 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             f"Ga-peel_{name}",
             [ms + "/calGa.h5" for ms in msets.getListStr()],
             [
+                parset_dir + "/losoto-ampnorm-full-diagonal.parset",
                 parset_dir + "/losoto-plot2d.parset",
                 parset_dir+'/losoto-plot2d-pol.parset', 
                 parset_dir+'/losoto-plot-pol.parset'
             ],
             plots_dir=f"peel-{name}",
+        )
+        
+        logger.info('Correction slow AMP+PH...')
+        command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
+            cor.parmdb=cal-Ga-peel_{name}.h5 cor.correction=fulljones \
+            cor.soltab=[amplitude000,phase000]'  
+        msets.run(
+            command,
+            log=f'$nameMS_corGa-peel-{name}.log', 
+            commandType='DP3'
         )
         return f"cal-Ga-peel_{name}.h5"    
 
@@ -286,26 +318,7 @@ def corrupt(msets: MeasurementSets, solution: str):
         log="$nameMS_corrupt.log",
         commandType="DP3",
     )
-    
-def correct(msets):
-    logger.info('Correction PH...')
-    command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
-        cor.parmdb=cal-Gp-c09-all-ampnorm.h5 cor.correction=phase000' 
-    msets.run(
-        command, 
-        log=f'$nameMS_corGp-c09.log', 
-        commandType='DP3'
-    )
-    
-    logger.info('Correction slow AMP+PH...')
-    command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
-        cor.parmdb=cal-Ga-c09-all-ampnorm.h5 cor.correction=fulljones \
-        cor.soltab=[amplitude000,phase000]'  
-    msets.run(
-        command,
-        log=f'$nameMS_corGa-c09.log', 
-        commandType='DP3'
-    )
+
 
 
 def subtract_model(
@@ -359,39 +372,44 @@ def peel(
             os.makedirs("mss-dir")
             
             solutions = list()
-            if do_test:
-                image_quick(mss_peel, f"peel-{name}/before-peel-{name}", predict=False, data_column="DATA")
-            
-            calibrate(mss_peel, "scalar", name)
-            sys.exit()
-            
             mss_shift = phaseshift_to_source(mss_peel, source, column_in="DATA")
             
             isolate_source_model(mss_shift, source, imagename)
             
-            #if do_test:
-            #    image_quick(mss_shift, f"peel-{name}/after-shift-{name}", predict=False, data_column="DATA")
+            
+            mss_shift.addcol("CORRECTED_DATA", "DATA")
+            if do_test:
+                image_quick(mss_shift, f"peel-{name}/after-shift-{name}", predict=True, data_column="CORRECTED_DATA")
+            
             
             solutions.append(calibrate(mss_shift, "scalar", name))
-            #solutions.append(calibrate(mss_shift, "fulljones", name))
+            solutions.append(calibrate(mss_shift, "fulljones", name))
             
             # we somehow have to subtract the source from mss_peel, with info from mss_shift
             # assume just corrupting works works for that
             if do_test:
+                image_quick(mss_shift, f"peel-{name}/data-after-correct", data_column="CORRECTED_DATA", predict=False, empty=True, wide=True)
                 image_quick(mss_shift, f"peel-{name}/model-before-corrupt", data_column="MODEL_DATA", predict=False, empty=True)
+                image_quick(mss_peel, f"peel-{name}/data-wide-before", data_column="DATA", predict=False, empty=True, wide=True)
                 
-            #isolate_source_model(mss_peel, source, imagename)
+            
+            isolate_source_model(mss_peel, source, imagename)
+            
             for sol in solutions:
-                corrupt(mss_shift, sol)
+                corrupt(mss_peel, sol)
             
             if do_test:
-                image_quick(mss_shift, f"peel-{name}/model-after-corrupt", data_column="MODEL_DATA", predict=False, empty=True)
+                image_quick(mss_peel, f"peel-{name}/model-after-corrupt", data_column="MODEL_DATA", predict=False, empty=True, wide=True)
             
-            subtract_model(mss_shift)
+            subtract_model(mss_peel)
 
             if do_test:
-                image_quick(mss_shift, f"peel-{name}/after-peel", data_column="DATA", predict=False, empty=True)
-                #predict_field(mss_peel, region, "img/wide-after")
+                #image_quick(mss_peel, f"peel-{name}/after-peel", data_column="DATA", predict=False)
+                image_quick(mss_peel, f"peel-{name}/data-wide-after", data_column="DATA", predict=False, empty=True, wide=True)
+                #predict_field(mss_peel, region, f"peel-{name}/wide-after")
+    
+    with WALKER.if_todo("image-final"):
+        predict_field(mss_peel, region, f"peel-{name}/peel-all")
     
     
 
