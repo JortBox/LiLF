@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os, sys, pickle, glob
 import aplpy
 from astropy.io import fits
 from astropy.cosmology import FlatLambdaCDM
-from pipeline_utils import source_angular_size
 
 import matplotlib.pyplot as plt
 import astropy.units as u
 import numpy as np
 
-import os, sys, pickle, glob
-import targets
 import analysis as asis
 from analysis import Source3C
 from calibration import extended_targets, very_extended_targets
@@ -185,6 +183,7 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     
 if __name__ == "__main__":
     DATA_DIR = "/data/data/3Csurvey/tgts/"
+    
     
     all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}*"))]
     catalog = asis.Catalogue3C(all_targets)

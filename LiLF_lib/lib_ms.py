@@ -20,7 +20,7 @@ iers.conf.auto_download = False
 
 class AllMSs(object):
 
-    def __init__(self, pathsMS, scheduler, check_flags=True, check_sun=False, min_sun_dist=10):
+    def __init__(self, pathsMS, scheduler: lib_util.Scheduler, check_flags=True, check_sun=False, min_sun_dist=10):
         """
         pathsMS:    list of MS paths
         scheduler:  scheduler object
