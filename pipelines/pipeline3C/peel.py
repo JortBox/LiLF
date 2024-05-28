@@ -62,13 +62,14 @@ def image_quick(
         channels_out=2,
     )
 
-def clean_peeling_dir(msets: MeasurementSets):
+def clean_peeling_dir(msets_list: list[str]):
     lib_util.check_rm("*.MS*peel")
     lib_util.check_rm("peel-*")
     
     logger.info("copying data to -> *-peel...")
-    for ms in msets.getListStr():
+    for ms in msets_list:
         os.system('cp -r %s %s' % (ms, ms + "-peel") )
+        
         
         
 def predict_field(msets: MeasurementSets, region_file: str|None, imagenameM: str, predict: bool = True):
@@ -169,7 +170,13 @@ def load_sky(imagename: str, phasecentre: tuple, region: str|None):
     return table
 
 
-def isolate_source_model(msets: MeasurementSets, source, imagename: str, predict:bool=True):
+def isolate_source_model(
+    msets: MeasurementSets, 
+    source, 
+    imagename: str, 
+    predict: bool = True, 
+    inverse: bool = False
+):
     name = str(source["Source_id"])
     peel_region_file = f"peel-{name}/{name}.reg"
     imagename_peel = f"peel-{name}/{imagename.split('/')[-1]}"
@@ -198,7 +205,7 @@ def isolate_source_model(msets: MeasurementSets, source, imagename: str, predict
     
     for model_file in glob.glob(imagename_peel + "*model.fits"):
         lib_img.blank_image_reg(
-            model_file, peel_region_file, blankval=0.0, inverse=True
+            model_file, peel_region_file, blankval=0.0, inverse=not inverse
         )
     
     if predict: 
@@ -235,7 +242,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             + parset_dir
             + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
                 sol.h5parm=$pathMS/calGp-peel.h5 sol.mode=scalarphase \
-                sol.solint=1 sol.smoothnessconstraint=1e6",
+                sol.solint=1",
             log="$nameMS_solGp-peel.log",
             commandType="DP3",
         )
@@ -270,7 +277,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             + parset_dir
             + "/DP3-solG.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
                 sol.h5parm=$pathMS/calGa.h5 sol.mode=fulljones \
-                sol.solint=50 ",
+                sol.solint=20 ",
             log="$nameMS_solGa-peel.log",
             commandType="DP3",
         )
@@ -280,7 +287,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             f"Ga-peel_{name}",
             [ms + "/calGa.h5" for ms in msets.getListStr()],
             [
-                parset_dir + "/losoto-ampnorm-full-diagonal.parset",
+                #parset_dir + "/losoto-ampnorm-full-diagonal.parset",
                 parset_dir + "/losoto-plot2d.parset",
                 parset_dir+'/losoto-plot2d-pol.parset', 
                 parset_dir+'/losoto-plot-pol.parset'
@@ -329,28 +336,36 @@ def subtract_model(
         log="$nameMS_taql.log",
         commandType="general",
     )
+    
+def add_model(
+    msets: MeasurementSets, column_in: str = "DATA", column_out: str = "DATA"
+):
+    msets.run(
+        f'taql "update $pathMS set {column_out} = {column_in} + MODEL_DATA"',
+        log="$nameMS_taql.log",
+        commandType="general",
+    )
 
 
 def peel(
-    msets: MeasurementSets, 
+    msets_list: list[str], 
     s: lib_util.Scheduler, 
     peel_max: int = 2, 
     do_test: bool = False
 ):
-    imagename = "img/img-wideM"
-    _, beam07reg, region = pipeline.make_beam_region(msets, TARGET)
-    
     with WALKER.if_todo("clean-peel"):
-        clean_peeling_dir(msets)
-        
+        clean_peeling_dir(msets_list)
+    
+    imagename = "img/img-wideM"
     mss_peel = MeasurementSets(glob.glob(f'*.MS*peel'), s)
+    __, __, region = pipeline.make_beam_region(mss_peel, TARGET)
     
     with WALKER.if_todo("predict-field"):    
         predict_field(mss_peel, region, imagename)
     
     phasecentre = mss_peel.getListObj()[0].getPhaseCentre()
     bright_sources = load_sky(imagename, phasecentre, region)
-    #central_sources = bright_sources[bright_sources["dist"]<0.1]
+    central_sources = bright_sources[bright_sources["dist"]<0.1]
     satellite_sources = bright_sources[bright_sources["dist"] >= 0.1]
     
     n_to_peel = peel_max
@@ -366,20 +381,21 @@ def peel(
         
         logger.info(f"Peeling {name} ({source['Total_flux']:.1f} Jy)")
         with WALKER.if_todo(f"peel-{name}"):
+            solutions = list()
             lib_util.check_rm(f"peel-{name}")
             lib_util.check_rm("mss-dir")
             os.makedirs(f"peel-{name}")
             os.makedirs("mss-dir")
             
-            solutions = list()
-            mss_shift = phaseshift_to_source(mss_peel, source, column_in="DATA")
+            mss_shift = phaseshift_to_source(mss_peel, source, column_in="CORRECTED_DATA")
             
             isolate_source_model(mss_shift, source, imagename)
             
-            
             mss_shift.addcol("CORRECTED_DATA", "DATA")
             if do_test:
-                image_quick(mss_shift, f"peel-{name}/after-shift-{name}", predict=True, data_column="CORRECTED_DATA")
+                image_quick(mss_shift, f"peel-{name}/after-shift-empty", predict=False, empty=True, data_column="DATA")
+                image_quick(mss_shift, f"peel-{name}/after-shift-empty-wide", predict=False, empty=True, wide=True, data_column="DATA")
+                image_quick(mss_shift, f"peel-{name}/after-shift-{name}", predict=True, data_column="DATA")
             
             
             solutions.append(calibrate(mss_shift, "scalar", name))
@@ -388,9 +404,12 @@ def peel(
             # we somehow have to subtract the source from mss_peel, with info from mss_shift
             # assume just corrupting works works for that
             if do_test:
-                image_quick(mss_shift, f"peel-{name}/data-after-correct", data_column="CORRECTED_DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_shift, f"peel-{name}/corrected_data_wide", data_column="CORRECTED_DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_shift, f"peel-{name}/corrected_data", data_column="CORRECTED_DATA", predict=False, empty=True)
                 image_quick(mss_shift, f"peel-{name}/model-before-corrupt", data_column="MODEL_DATA", predict=False, empty=True)
-                image_quick(mss_peel, f"peel-{name}/data-wide-before", data_column="DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_shift, f"peel-{name}/model-before-corrupt-wide", data_column="MODEL_DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_peel, f"peel-{name}/data-wide-before", data_column="CORRECTED_DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_peel, f"peel-{name}/data-before", data_column="CORRECTED_DATA", predict=False, empty=True)
                 
             
             isolate_source_model(mss_peel, source, imagename)
@@ -401,15 +420,20 @@ def peel(
             if do_test:
                 image_quick(mss_peel, f"peel-{name}/model-after-corrupt", data_column="MODEL_DATA", predict=False, empty=True, wide=True)
             
-            subtract_model(mss_peel)
+            subtract_model(mss_peel, column_in="CORRECTED_DATA", column_out="DATA")
 
             if do_test:
                 #image_quick(mss_peel, f"peel-{name}/after-peel", data_column="DATA", predict=False)
-                image_quick(mss_peel, f"peel-{name}/data-wide-after", data_column="DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_peel, f"peel-{name}/data-wide-after", data_column="CORRECTED_DATA", predict=False, empty=True, wide=True)
                 #predict_field(mss_peel, region, f"peel-{name}/wide-after")
+                
+            add_model(mss_peel)
+            sys.exit()
+                
+            isolate_source_model(mss_peel, source, imagename, inverse=True)
     
-    with WALKER.if_todo("image-final"):
-        predict_field(mss_peel, region, f"peel-{name}/peel-all")
+    #with WALKER.if_todo("image-final"):
+    #    predict_field(mss_peel, region, f"peel-{name}/peel-all")
     
     
 
@@ -426,11 +450,11 @@ if __name__ == "__main__":
 
     TARGET = os.getcwd().split("/")[-1]
     
+    # Assume original_mss has corrected CORRECTED_DATA column
     original_mss = MeasurementSets(
-        glob.glob(f'*.MS-phaseup-final'), 
+        glob.glob(f'*.MS-phaseup'), 
         SCHEDULE, 
-        check_flags=False, 
-        check_sun=True
+        check_flags=False
     ) 
     
-    peel(original_mss, SCHEDULE, peel_max=1, do_test=True)
+    peel(original_mss.getListStr(), SCHEDULE, peel_max=1, do_test=True)

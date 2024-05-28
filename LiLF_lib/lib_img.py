@@ -338,7 +338,7 @@ def blank_image_fits(filename, maskname, outfile = None, inverse = False, blankv
         fits.writeto(outfile, overwrite=True)
 
  
-def blank_image_reg(filename, region, outfile = None, inverse = False, blankval = 0., op = "AND"):
+def blank_image_reg(filename, region, outfile = None, inverse:bool = False, blankval = 0., op = "AND"):
     """
     Set to "blankval" all the pixels inside the given region
     if inverse=True, set to "blankval" pixels outside region.
