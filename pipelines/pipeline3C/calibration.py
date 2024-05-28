@@ -19,9 +19,8 @@ parset_dir = parset.get('LOFAR_3c_core', 'parset_dir')
 TARGET = os.getcwd().split('/')[-1]
 
 extended_targets = [
-    '3c223','3c284',
-    '3c285','3c293','3c296',
-    #'3c31',
+    '3c223','3c284','3c274'
+    '3c285','3c293','3c296','3c31',
     '3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
     '3c454.3','3c465','3c84', '4c73.08', 'ngc6109'
@@ -383,7 +382,7 @@ class SelfCalibration(object):
             logger.info("NO Manual mask used")
             
             
-    def clean(self, imagename: str, uvlambdamin: int = 30, deep: bool = False, size: int = 2500, predict: bool = True) -> None:
+    def clean(self, imagename: str, uvlambdamin: int = 30, deep: bool = False, size: int = 2500, predict: bool = True, apply_beam: bool = False) -> None:
         # special for extended sources:
         print("TARGET:", TARGET)
         if TARGET in very_extended_targets:
@@ -434,6 +433,9 @@ class SelfCalibration(object):
             kwargs1["size"] = 500; kwargs1["scale"] = "50.0arcsec" # type: ignore
             kwargs2["size"] = 500; kwargs2["scale"] = "50.0arcsec" # type: ignore
             kwargs2["weight"] = "briggs -0.8" # type: ignore
+        
+        if apply_beam:
+            kwargs2.update({"apply_primary_beam": ""})
         
         print("kwargs1, kwargs2")   
         print(kwargs1)
@@ -509,6 +511,7 @@ class SelfCalibration(object):
                 parallel_gridding=4,
                 niter=1000000, 
                 circular_beam='',
+                #apply_primary_beam='',
                 no_update_model_required='',
                 minuv_l=uvlambdamin, 
                 mgain=0.4, 

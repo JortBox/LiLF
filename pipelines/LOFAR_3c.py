@@ -33,6 +33,7 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('--smooth_all_pols', dest='smooth_all_pols', action='store_true', default=False)
     parser.add_argument('--scalar_only', dest='scalar_only', action='store_true', default=False)
     parser.add_argument('--no_fulljones', dest='no_fulljones', action='store_true', default=False)
+    parser.add_argument("--apply_beam", dest="apply_beam", action="store_true", default=False)
     return parser.parse_args()
 
     
@@ -257,16 +258,17 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         final_cycle_fj = 0
         data_in = "DATA"
         
-        rms_history = np.loadtxt(f'rms_noise_history_core.csv', delimiter=",")
-        ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
-        
-        assert len(rms_history) == len(ratio_history)
-        if np.argmax(ratio_history) == 0:
-            correct_cycle = 1
-        elif np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
-            correct_cycle = - 1
-        else:
-            correct_cycle = np.argmax(ratio_history) - len(ratio_history)
+        if len(solution) != 0 or len(fulljones_solution) != 0:
+            rms_history = np.loadtxt(f'rms_noise_history_core.csv', delimiter=",")
+            ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
+            
+            assert len(rms_history) == len(ratio_history)
+            if np.argmax(ratio_history) == 0:
+                correct_cycle = 1
+            elif np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
+                correct_cycle = - 1
+            else:
+                correct_cycle = np.argmax(ratio_history) - len(ratio_history)
         
         
         if len(solution) != 0:
@@ -277,7 +279,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         print(final_cycle_sol, final_cycle_fj)
         print(0 > final_cycle_sol >= final_cycle_fj)
 
-        if final_cycle_sol >= final_cycle_fj >= 0:
+        if final_cycle_sol >= final_cycle_fj  and  final_cycle_sol > 0:
             Logger.info(f"correction Gain-scalar of {solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -291,7 +293,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
             Logger.warning(f"No phase Core corrections found. Phase-up not recommended")
         
         
-        if final_cycle_fj >= final_cycle_sol >= 0:
+        if final_cycle_fj >= final_cycle_sol and final_cycle_fj > 0:
             Logger.info(f"Correction Gain of {fulljones_solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -569,7 +571,7 @@ def main(args: argparse.Namespace) -> None:
                 
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 try:
-                    calibration.clean(imagename)
+                    calibration.clean(imagename, apply_beam=args.apply_beam)
                     rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 except RuntimeError:
                     Logger.error(f"Failed to clean {imagename}")

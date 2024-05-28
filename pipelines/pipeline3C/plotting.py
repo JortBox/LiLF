@@ -192,7 +192,13 @@ if __name__ == "__main__":
         if source.name in ["3c296"]:
             continue
         
-        path = f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits"
+        paths = sorted(glob.glob(f"{DATA_DIR}{source.name}/img/img-all-*-MFS-image.fits"))
+        if len(paths) <= 1:
+            print(f"Failed to plot {source.name}")
+            continue
+        
+        path = paths[-2]
+        #path = f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits"
         if os.path.exists(path):
             source.set_data(path) 
         else:
