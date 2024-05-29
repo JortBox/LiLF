@@ -74,6 +74,8 @@ def clean_peeling_dir(msets_list: list[str]):
         
 def predict_field(msets: MeasurementSets, region_file: str|None, imagenameM: str, predict: bool = True):
     imagename_pre = imagenameM + "pre"
+    lib_util.check_rm(imagename_pre + "*")
+    lib_util.check_rm(imagenameM + "*")
     
     # Low res image
     logger.info("Cleaning wide 1...")
@@ -102,8 +104,9 @@ def predict_field(msets: MeasurementSets, region_file: str|None, imagenameM: str
     )
     
     # makemask
+    region_file = None
     im = lib_img.Image(imagename_pre + "-MFS-image.fits", userReg=region_file)
-    im.makeMask(mode="default", threshpix=5, rmsbox=(50, 5))
+    im.makeMask(mode="breizorro", threshpix=5, rmsbox=(100, 25), schedule=msets.scheduler)
     maskfits = imagename_pre + "-mask.fits"
 
     logger.info("Cleaning wide 2...")
@@ -139,7 +142,7 @@ def predict_field(msets: MeasurementSets, region_file: str|None, imagenameM: str
 
 def setup() -> None:
     MSs_list = MeasurementSets( 
-        glob.glob('/data/*MS'), 
+        glob.glob('data/*MS'), 
         SCHEDULE, 
         check_flags=False
     ).getListStr()
@@ -169,16 +172,20 @@ def load_sky(imagename: str, phasecentre: tuple, region: str|None):
     full_image = lib_img.Image(imagename + "-MFS-image.fits", userReg=region)
     mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
     
+
+    print("PyBDSF failed, trying with auto boxsize")
     full_image.makeMask(
         mode="default",
         threshpix=5,
+        rmsbox=None,
         atrous_do=False,
         maskname=mask_ddcal,
         write_srl=True,
         write_ds9=True,
     )
-    
+
     table = AstroTab.read(mask_ddcal.replace("fits", "cat.fits"), format="fits")
+    print(table.sort(["Total_flux"], reverse=True))
     table = table[np.where(table["Total_flux"] > 8)] # all 3c sources ar at least 10 Jy 
     table.sort(["Total_flux"], reverse=True)
     
@@ -334,11 +341,11 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
         return f"cal-Ga-peel_{name}.h5"    
     
 def correct(msets: MeasurementSets, solution: str, column_in: str = "DATA", column_out: str = "CORRECTED_DATA", mode = None):
-    if "Gp" in solution:
+    if "cal-Gp" in solution:
         correction = "phase000"
         soltab = ""
-    elif "Ga" == solution:
-        correction = "fullljones"
+    elif "cal-Ga" in solution:
+        correction = "fulljones"
         soltab = "cor.soltab=[amplitude000,phase000]"
 
     logger.info(f'Correction of {solution}...')
@@ -360,7 +367,7 @@ def corrupt(msets: MeasurementSets, solution: str):
     elif "Ga" in solution:
         correction = "fulljones"
         soltab = "cor.soltab=[amplitude000,phase000]"    
-        
+    
     msets.run( # was MSs
         f"DP3 {PARSET_DIR}/DP3-cor.parset msin=$pathMS \
             msin.datacolumn=MODEL_DATA msout.datacolumn=MODEL_DATA \
@@ -498,19 +505,23 @@ if __name__ == "__main__":
 
 
     stats = "core"
-    while WALKER.if_todo("setup"):
+    with WALKER.if_todo(f"setup-{stats}"):
         setup()
         
-        original_mss = MeasurementSets(glob.glob(f'*.MS-{stats}'), SCHEDULE,) 
+        original_mss = MeasurementSets(glob.glob(f'*{stats}.MS'), SCHEDULE,) 
         
-        solutions = ["cal-Gph-c03-core-ampnorm.h5", "cal-Ga-c03-core-ampnorm.h5"]
+        solutions = [
+            "cal-Gph-c03-core-ampnorm.h5", 
+            "cal-Ga-c03-core-ampnorm.h5",
+            #"cal-Gp-c03-all-ampnorm.h5", 
+            #"cal-Ga-c03-all-ampnorm.h5",
+        ]
         column_in = "DATA"
         for sol in solutions:
-            correct(original_mss, sol, column_out=column_out)
-            column_out = "CORRECTED_DATA"
+            correct(original_mss, sol, column_in=column_in)
+            column_in = "CORRECTED_DATA"
     
     # apply solutions from solsets (core first then remote as well)
     # try peeling on core data first, then try for all dutch stations 
-    
-    original_mss = MeasurementSets(glob.glob(f'*.MS-{stats}'), SCHEDULE,) 
+    original_mss = MeasurementSets(glob.glob(f'*{stats}.MS'), SCHEDULE,) 
     peel(original_mss.getListStr(), SCHEDULE, peel_max=1, do_test=True)

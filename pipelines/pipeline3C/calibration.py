@@ -435,7 +435,12 @@ class SelfCalibration(object):
             kwargs2["weight"] = "briggs -0.8" # type: ignore
         
         if apply_beam:
-            kwargs2.update({"apply_primary_beam": ""})
+            kwargs1.update({"apply_primary_beam": ""})
+            #kwargs2.update({"apply_primary_beam": ""})
+            
+        if deep:
+            kwargs1.update({"circular_beam": ""})
+            kwargs2.update({"circular_beam": ""})
         
         print("kwargs1, kwargs2")   
         print(kwargs1)
@@ -469,66 +474,34 @@ class SelfCalibration(object):
         
         maskfits = imagename+'-mask.fits'
         self.apply_mask(imagename, maskfits)
-        
-        if not deep:
-            logger.info('Cleaning full (cycle: '+str(self.cycle)+')...')
-            lib_util.run_wsclean(
-                self.s, 
-                'wsclean2-c%02i.log' % self.cycle, 
-                self.mss.getStrWsclean(), 
-                name=imagename,
-                do_predict=predict, 
-                cont=True, 
-                parallel_gridding=4,
-                niter=1000000, 
-                no_update_model_required='',
-                #circular_beam='',
-                minuv_l=uvlambdamin,
-                mgain=0.4, 
-                nmiter=0,
-                auto_threshold=0.5, 
-                auto_mask=2., 
-                local_rms='', 
-                local_rms_method='rms-with-min', 
-                fits_mask=maskfits,
-                multiscale='',
-                join_channels='', 
-                fit_spectral_pol=2, 
-                channels_out=2, 
-                **kwargs2
-            )
-            os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)
-        
-        else:
-            logger.info('Cleaning full (cycle: '+str(self.cycle)+')...')
-            lib_util.run_wsclean(
-                self.s, 
-                'wsclean2-c%02i.log' % self.cycle, 
-                self.mss.getStrWsclean(), 
-                name=imagename,
-                do_predict=predict, 
-                cont=True, 
-                parallel_gridding=4,
-                niter=1000000, 
-                circular_beam='',
-                #apply_primary_beam='',
-                no_update_model_required='',
-                minuv_l=uvlambdamin, 
-                mgain=0.4, 
-                nmiter=0,
-                auto_threshold=0.5, 
-                auto_mask=2., 
-                local_rms='', 
-                local_rms_method='rms-with-min', 
-                fits_mask=maskfits,
-                multiscale='', 
-                multiscale_scale_bias=0.6,
-                join_channels='', 
-                fit_spectral_pol=2, 
-                channels_out=2, 
-                **kwargs2
-            )
-            os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)            
+
+        logger.info('Cleaning full (cycle: '+str(self.cycle)+')...')
+        lib_util.run_wsclean(
+            self.s, 
+            'wsclean2-c%02i.log' % self.cycle, 
+            self.mss.getStrWsclean(), 
+            name=imagename,
+            do_predict=predict, 
+            cont=True, 
+            parallel_gridding=4,
+            niter=1000000, 
+            no_update_model_required='',
+            #circular_beam='',
+            minuv_l=uvlambdamin,
+            mgain=0.4, 
+            nmiter=0,
+            auto_threshold=0.5, 
+            auto_mask=2., 
+            local_rms='', 
+            local_rms_method='rms-with-min', 
+            fits_mask=maskfits,
+            multiscale='',
+            join_channels='', 
+            fit_spectral_pol=2, 
+            channels_out=2, 
+            **kwargs2
+        )
+        os.system('cat logs/wsclean-c%02i.log | grep "background noise"' % self.cycle)    
         
         
     def low_resolution_clean(self, imagename: str, uvlambdamin: int = 30, taper: float=25):

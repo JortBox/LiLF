@@ -124,7 +124,7 @@ class Image(object):
             
             if mode == "breizorro" and schedule is not None:
                 schedule.add(
-                    f'/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/breizorro.py \
+                    f'/data/scripts/LiLF/scripts/breizorro.py \
                         -t {threshpix} -r {self.imagename} \
                         -b {rmsbox[0]} -o {maskname}', 
                     log='makemask-c%02i.log' % c, 

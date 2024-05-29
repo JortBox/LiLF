@@ -9,6 +9,10 @@
             "correction": 1.09,
             "freq": 178
         },{
+            "refcode": "1980MNRAS.190..903L",
+            "correction": 0.94,
+            "freq": 86
+        },{
             "refcode": "1969SvA....12..567A",
             "correction": 0.94,
             "freq": 86
@@ -27,6 +31,10 @@
         },{
             "refcode": "1969AJ.....74..366R",
             "correction": 1.15,
+            "freq": 22.25
+        },{
+            "refcode": "1980MNRAS.190..903L",
+            "correction": 1.0,
             "freq": 22.25
         },{
             "refcode": "1990MNRAS.243..637R",
@@ -60,6 +68,14 @@
             "refcode": "1997BSAO...44...50K",
             "correction": 1.0,
             "freq": 960
+        },{
+            "refcode": "1969ApJ...157....1K",
+            "correction": 1.0,
+            "freq": 750
+        },{
+            "refcode": "1980MNRAS.190..903L",
+            "correction": 1.0,
+            "freq": 750
         }
     ]
 }

@@ -52,6 +52,8 @@ class Flux(object):
         self.corrected = False
         self.refcode = refcode
         
+        self.flux_orig = np.copy(self.flux)
+        
         try:
             self.correct_flux(refcode)
         except FileNotFoundError:
@@ -74,7 +76,7 @@ class Flux(object):
             corrections = json.load(file)["data"]
         
         for correction in corrections:
-            if refcode == correction["refcode"] or self.freq.value == correction["freq"]:
+            if refcode == correction["refcode"] and abs(self.freq.value - correction["freq"]) < 1:
                 self.flux *= correction["correction"]
                 self.corrected = True
                 break
@@ -151,6 +153,10 @@ class SED(object):
     @property
     def is_manual(self):
         return np.asarray([flux.is_manual for flux in self.fluxes])
+    
+    @property
+    def corrected(self):
+        return np.asarray([flux.corrected for flux in self.fluxes])
     
     @property
     def refcode(self):
