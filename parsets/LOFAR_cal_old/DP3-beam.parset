@@ -1,13 +1,11 @@
 msin =
 msin.datacolumn = CORRECTED_DATA
+
 msout = .
 msout.datacolumn = CORRECTED_DATA
 
-steps = [setbeam,corrbeam]
-
-setbeam.type = setbeam
-setbeam.beammode = none
+steps = [corrbeam]
 
 corrbeam.type = applybeam
-corrbeam.usechannelfreq = True
+corrbeam.usechannelfreq = False
 corrbeam.beammode = element

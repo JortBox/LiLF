@@ -15,7 +15,7 @@ from astroquery.ipac.ned import Ned
 from astropy.coordinates import SkyCoord
 from astropy.table import Table as AstroTab
 
-sys.path.append("/data/scripts/LiLF")
+sys.path.append("LiLF")
 from LiLF_lib import lib_util
 import LiLF_lib.lib_img as lilf
 
@@ -174,6 +174,7 @@ class Source3C(object):
         self._default_rms = False
         self.data_set = False
         self.dynamic_range = 0
+        self.diameter = np.nan
         
     def set_redshift(self, z: float):
         self.z = z
@@ -206,6 +207,7 @@ class Source3C(object):
     def clear_data(self):
         self.data_set = False
         del self.data
+        del self.header
         
     def clear_sed(self):
         self.SED = SED(self.name)
@@ -260,6 +262,10 @@ class Catalogue3C(object):
         else:
             self._counter = 0
             raise StopIteration
+        
+    def reorder(self, order: list[str], reverse: bool = False):
+        self.sources = list(np.asarray(self.sources)[order])
+        self.sources_dict = dict(zip([source.name for source in self.sources], range(len(self.sources))))
     
      
     @property
@@ -274,7 +280,7 @@ class Catalogue3C(object):
     
     @property
     def flux(self) -> np.ndarray:
-        return np.array([source.flux for source in self.sources])
+        return np.array([source.SED.flux["58MHz"] for source in self.sources])
     
     @property
     def diameter(self) -> np.ndarray:

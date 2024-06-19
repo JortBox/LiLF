@@ -7,7 +7,8 @@ import casacore.tables as pt
 from astropy.time import Time
 
 ##########################################
-from LiLF import lib_ms, lib_util, lib_log
+sys.path.append("/home/local/work/j.boxelaar/scripts/LiLF")
+from LiLF_lib import lib_ms, lib_util, lib_log
 logger_obj = lib_log.Logger('pipeline-preprocess')
 logger = lib_log.logger
 s = lib_util.Scheduler(log_dir = logger_obj.log_dir, dry = False)
@@ -28,7 +29,7 @@ if os.path.exists('html.txt'):
 else:
     download_file = None # just renaming
 
-def getName(ms):
+def getName(ms, mkdir=True):
     """
     Get new MS name based on obs name and time
     """
@@ -61,7 +62,7 @@ def getName(ms):
     #    return cycle_obs+'/'+sou+'/'+sou+'_t'+time+'_SB'+str(lib_util.lofar_nu2num(freq/1.e6))+'.MS'
     #else:
     
-    if not os.path.exists('mss/id'+obsid+'_-_'+code): os.makedirs('mss/id'+obsid+'_-_'+code)
+    if not os.path.exists('mss/id'+obsid+'_-_'+code) and mkdir: os.makedirs('mss/id'+obsid+'_-_'+code)
     return 'mss/id'+obsid+'_-_'+code+'/'+code+'_SB%03i.MS' % lib_util.lofar_nu2num(freq/1.e6)
 
 ########################################
@@ -84,111 +85,127 @@ if not download_file is None:
                 logger.debug('Queue download of: '+line[:-1])
             s.run(check=True, maxThreads=4)
 
-MSs = lib_ms.AllMSs(glob.glob('*MS'), s, check_flags=False)
-if len(MSs.getListStr()) == 0:
-    logger.info('Done.')
-    sys.exit(0)
+all_files = sorted(glob.glob('*MS'))
+files_per_chunk = 10
+chunks = int(np.ceil(len(all_files)/files_per_chunk))
+for i, chunk in enumerate(range(chunks)):
+    with w.if_todo('Processing Chunk %i' % (i+1)):
+        
+        logger.info('Processing Chunk %i/%i' % (i+1, chunks))
+        try:
+            if files_per_chunk * (i+1) < len(all_files):
+                logger.info('Reading MSs %i to %i...' % (i*files_per_chunk, files_per_chunk*(i+1)))
+                MSs = lib_ms.AllMSs(all_files[i*files_per_chunk:files_per_chunk*(i+1)], s, check_flags=False)
+            else:
+                MSs = lib_ms.AllMSs(all_files[i*files_per_chunk:], s, check_flags=False)
+        except RuntimeError:
+            logger.error(f'Error reading MSs {all_files[i*files_per_chunk]} with {files_per_chunk} files per chunkc. Skipping...')
+            continue
 
-######################################
-with pt.table(MSs.getListStr()[0]+'/OBSERVATION', readonly=True, ack=False) as obs:
-    t = Time(obs.getcell('TIME_RANGE',0)[0]/(24*3600.), format='mjd')
-    time = np.int(t.iso.replace('-','')[0:8])
+    if len(MSs.getListStr()) == 0:
+        logger.info('Done.')
+        sys.exit(0)
 
-if fix_table:
-    with w.if_todo('fix_table'):
-        #logger.info('Fix MS table...')
-        #MSs.run('fixMS_TabRef.py $pathMS', log='$nameMS_fixms.log', commandType='python')
-        # only ms created in range (2/2013->2/2014)
-        if time > 20130200 and time < 20140300:
-            logger.info('Fix beam table...')
-            MSs.run('/home/fdg/scripts/fixinfo/fixbeaminfo $pathMS', log='$nameMS_fixbeam.log', commandType='python')
+    ######################################
+    with pt.table(MSs.getListStr()[0]+'/OBSERVATION', readonly=True, ack=False) as obs:
+        t = Time(obs.getcell('TIME_RANGE',0)[0]/(24*3600.), format='mjd')
+        time = int(t.iso.replace('-','')[0:8])
 
-# Rescale visibilities by 1e3 if before 2014-03-19 (old correlator), and by 1e-2 otherwise
-with w.if_todo('rescale_flux'):
-    logger.info('Rescaling flux...')
-    if time < 20140319:
-        rescale_factor = 1e6
-    else:
-        rescale_factor = 1e-4
+    if fix_table:
+        with w.if_todo('fix_table '+str(i+1)):
+            #logger.info('Fix MS table...')
+            #MSs.run('fixMS_TabRef.py $pathMS', log='$nameMS_fixms.log', commandType='python')
+            # only ms created in range (2/2013->2/2014)
+            if time > 20130200 and time < 20140300:
+                logger.info('Fix beam table...')
+                MSs.run('/home/fdg/scripts/fixinfo/fixbeaminfo $pathMS', log='$nameMS_fixbeam.log', commandType='python')
 
-    for MS in MSs.getListStr():
-        with pt.table(MS+'/HISTORY', readonly=False, ack=False) as hist:
-            if "Flux rescaled" not in hist.getcol('MESSAGE'):
-                s.add('taql "update %s set DATA = %f*DATA" && taql "insert into %s/HISTORY (TIME,MESSAGE) values (mjd(), \'Flux rescaled\')"' % (MS,rescale_factor,MS), \
-                        log='taql.log', commandType='general')
-    s.run(check=True)
+    # Rescale visibilities by 1e3 if before 2014-03-19 (old correlator), and by 1e-2 otherwise
+    with w.if_todo('rescale_flux '+str(i+1)):
+        logger.info('Rescaling flux...')
+        if time < 20140319:
+            rescale_factor = 1e6
+        else:
+            rescale_factor = 1e-4
 
-######################################
-# Avg to 4 chan and 2 sec
-# Remove internationals
-if renameavg:
+        for MS in MSs.getListStr():
+            with pt.table(MS+'/HISTORY', readonly=False, ack=False) as hist:
+                if "Flux rescaled" not in hist.getcol('MESSAGE'):
+                    s.add('taql "update %s set DATA = %f*DATA" && taql "insert into %s/HISTORY (TIME,MESSAGE) values (mjd(), \'Flux rescaled\')"' % (MS,rescale_factor,MS), \
+                            log='taql.log', commandType='general')
+        s.run(check=True)
 
-    with w.if_todo('renameavg'):
-        logger.info('Renaming/averaging...')
-        with open('renamed.txt','a') as flog:
-            MSs = lib_ms.AllMSs([MS for MS in glob.glob('*MS') if not os.path.exists(getName(MS))], s, check_flags=False)
-            minfreq = np.min(MSs.getFreqs())
-            logger.info('Min freq: %.2f MHz' % (minfreq/1e6))
-            for MS in MSs.getListObj():
+    ######################################
+    # Avg to 4 chan and 2 sec
+    # Remove internationals
+    if renameavg:
+        with w.if_todo('renameavg '+str(i+1)):
+            logger.info('Renaming/averaging...')
+            with open('renamed.txt','a') as flog:
+                MSs = lib_ms.AllMSs([MS for MS in MSs.getListStr()], s, check_flags=False)
+                #MSs = lib_ms.AllMSs([MS for MS in MSs.getListStr() if not os.path.exists(getName(MS,mkdir=False))], s, check_flags=False)
+                minfreq = np.min(MSs.getFreqs())
+                logger.info('Min freq: %.2f MHz' % (minfreq/1e6))
+                for MS in MSs.getListObj():
 
-                if np.all(MS.getFreqs() > 168.3e6):
-                    logger.warning(f'Skipping HBA above 168 MHz: deleting {MS.pathMS}')
-                    lib_util.check_rm(MS.pathMS)
-                    continue
-
-                # get avg time/freq values
-                nchan = MS.getNchan()
-                timeint = MS.getTimeInt()
-
-                if nchan == 1:
-                    avg_factor_f = 1
-                elif nchan % 2 == 0 and MSs.isHBA: # case HBA
-                    avg_factor_f = int(nchan / 4)  # to 2 ch/SB
-                elif nchan % 8 == 0 and minfreq < 40e6:
-                    avg_factor_f = int(nchan / 8)  # to 8 ch/SB
-                elif nchan % 8 == 0 and 'SPARSE' in MS.getAntennaSet():
-                    avg_factor_f = int(nchan / 8)  # to 8 ch/SB
-                elif nchan % 4 == 0:
-                    avg_factor_f = int(nchan / 4)  # to 4 ch/SB
-                elif nchan % 5 == 0:
-                    avg_factor_f = int(nchan / 5)  # to 5 ch/SB
-                else:
-                    logger.error('Channels should be a multiple of 4 or 5.')
-                    sys.exit(1)
-
-                if keep_IS:
-                     avg_factor_f = int(nchan / 16) if MSs.isHBA else int(nchan / 16) # to have the full FoV in LBA we need 32 ch/SB
-                if avg_factor_f < 1: avg_factor_f = 1
-
-                avg_factor_t = int(np.round(2/timeint)) if keep_IS else int(np.round(4/timeint)) # to 4 sec (2 for IS)
-                if avg_factor_t < 1: avg_factor_t = 1
-
-                MSout = getName(MS.pathMS)
-                if avg_factor_f != 1 or avg_factor_t != 1:
-                    logger.info('%s->%s: Average in freq (factor of %i) and time (factor of %i)...' % (MS.nameMS, MSout, avg_factor_f, avg_factor_t))
-                    if keep_IS:
-                        s.add('DP3 '+parset_dir+'/DP3-avg.parset msin='+MS.pathMS+' msout='+MSout+' msin.datacolumn=DATA \
-                            avg.timestep='+str(avg_factor_t)+' avg.freqstep='+str(avg_factor_f), \
-                            log=MS.nameMS+'_avg.log', commandType='DP3')
-                    else: # remove IS
-                        s.add('DP3 '+parset_dir+'/DP3-avg.parset msin='+MS.pathMS+' msout='+MSout+' msin.datacolumn=DATA \
-                            msin.baseline="[CR]S*&" \
-                            avg.timestep='+str(avg_factor_t)+' avg.freqstep='+str(avg_factor_f), \
-                            log=MS.nameMS+'_avg.log', commandType='DP3')
-                    s.run(check=True, maxThreads=1) # limit threads to prevent I/O isssues
-                    if backup_full_res:
-                        logger.info('Backup full resolution data...')
-                        if not os.path.exists('data-bkp'):
-                            os.makedirs('data-bkp')
-                        for MS in MSs.getListObj():
-                            MS.move('data-bkp/' + MS.nameMS + '.MS', keepOrig=False, overwrite=False)
-                    else:
+                    if np.all(np.asarray(MS.getFreqs()) > 168.3e6):
+                        logger.warning(f'Skipping HBA above 168 MHz: deleting {MS.pathMS}')
                         lib_util.check_rm(MS.pathMS)
-                    flog.write(MS.nameMS+'.MS\n') # after averaging to be sure no log is written if an error occurs
-                else:
-                    logger.info('%s->%s: Move data - no averaging...' % (MS.nameMS, MSout))
-                    flog.write(MS.nameMS+'.MS\n') # before move or the filenmae is changed
-                    MS.move(MSout)
+                        continue
+
+                    # get avg time/freq values
+                    nchan = MS.getNchan()
+                    timeint = MS.getTimeInt()
+
+                    if nchan == 1:
+                        avg_factor_f = 1
+                    elif nchan % 2 == 0 and MSs.isHBA: # case HBA
+                        avg_factor_f = int(nchan / 4)  # to 2 ch/SB
+                    elif nchan % 8 == 0 and minfreq < 40e6:
+                        avg_factor_f = int(nchan / 8)  # to 8 ch/SB
+                    elif nchan % 8 == 0 and 'SPARSE' in MS.getAntennaSet():
+                        avg_factor_f = int(nchan / 8)  # to 8 ch/SB
+                    elif nchan % 4 == 0:
+                        avg_factor_f = int(nchan / 4)  # to 4 ch/SB
+                    elif nchan % 5 == 0:
+                        avg_factor_f = int(nchan / 5)  # to 5 ch/SB
+                    else:
+                        logger.error('Channels should be a multiple of 4 or 5.')
+                        sys.exit(1)
+
+                    if keep_IS:
+                        avg_factor_f = int(nchan / 16) if MSs.isHBA else int(nchan / 16) # to have the full FoV in LBA we need 32 ch/SB
+                    if avg_factor_f < 1: avg_factor_f = 1
+
+                    avg_factor_t = int(np.round(2/timeint)) if keep_IS else int(np.round(4/timeint)) # to 4 sec (2 for IS)
+                    if avg_factor_t < 1: avg_factor_t = 1
+
+                    MSout = getName(MS.pathMS)
+                    if avg_factor_f != 1 or avg_factor_t != 1:
+                        logger.info('%s->%s: Average in freq (factor of %i) and time (factor of %i)...' % (MS.nameMS, MSout, avg_factor_f, avg_factor_t))
+                        if keep_IS:
+                            s.add('DP3 '+parset_dir+'/DP3-avg.parset msin='+MS.pathMS+' msout='+MSout+' msin.datacolumn=DATA \
+                                avg.timestep='+str(avg_factor_t)+' avg.freqstep='+str(avg_factor_f), \
+                                log=MS.nameMS+'_avg.log', commandType='DP3')
+                        else: # remove IS
+                            s.add('DP3 '+parset_dir+'/DP3-avg.parset msin='+MS.pathMS+' msout='+MSout+' msin.datacolumn=DATA \
+                                msin.baseline="[CR]S*&" \
+                                avg.timestep='+str(avg_factor_t)+' avg.freqstep='+str(avg_factor_f), \
+                                log=MS.nameMS+'_avg.log', commandType='DP3')
+                        s.run(check=True, maxThreads=1) # limit threads to prevent I/O isssues
+                        if backup_full_res:
+                            logger.info('Backup full resolution data...')
+                            if not os.path.exists('data-bkp'):
+                                os.makedirs('data-bkp')
+                            for MS in MSs.getListObj():
+                                MS.move('data-bkp/' + MS.nameMS + '.MS', keepOrig=False, overwrite=False)
+                        else:
+                            lib_util.check_rm(MS.pathMS)
+                        flog.write(MS.nameMS+'.MS\n') # after averaging to be sure no log is written if an error occurs
+                    else:
+                        logger.info('%s->%s: Move data - no averaging...' % (MS.nameMS, MSout))
+                        flog.write(MS.nameMS+'.MS\n') # before move or the filenmae is changed
+                        MS.move(MSout)
 
 
 logger.info("Done.")

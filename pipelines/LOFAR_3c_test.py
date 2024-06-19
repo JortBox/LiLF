@@ -6,6 +6,10 @@ import lsmtool #type: ignore
 import numpy as np
 import argparse
 
+from astroquery.ipac.ned import Ned
+from astropy.coordinates import SkyCoord
+import astropy.units as u
+
 #from argparse import ArgumentParser
 sys.path.append("/data/scripts/LiLF")
 
@@ -28,6 +32,8 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('--bl_smooth_fj', dest='bl_smooth_fj', action='store_true', default=False)
     parser.add_argument('--smooth_all_pols', dest='smooth_all_pols', action='store_true', default=False)
     parser.add_argument('--scalar_only', dest='scalar_only', action='store_true', default=False)
+    parser.add_argument('--no_fulljones', dest='no_fulljones', action='store_true', default=False)
+    parser.add_argument("--apply_beam", dest="apply_beam", action="store_true", default=False)
     return parser.parse_args()
 
     
@@ -133,7 +139,44 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
         log='$nameMS_taql.log', 
         commandType='general'
     )
+
+
+def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
+    phasecenter = MSs.getListObj()[0].getPhaseCentre()
+    phasecenter = SkyCoord(
+        ra=phasecenter[0], 
+        dec=phasecenter[1], 
+        unit=(u.deg, u.deg), 
+        frame='fk4'
+    )
     
+    table = Ned.query_object(TARGET)
+    target_coord = SkyCoord(
+        ra = float(table["RA"]),  # type: ignore
+        dec = float(table["DEC"]),  # type: ignore
+        unit = (u.deg, u.deg), 
+        frame = 'fk4'
+    )
+    del table
+    
+    seperation = phasecenter.separation(target_coord).arcmin
+
+    if seperation > 5: #type: ignore
+        Logger.info(f"Source is {seperation:.1f} arcmin away from phasecenter. aligning phases to source")
+        MSs.run(
+            f"DP3 {parset_dir}/DP3-shift.parset \
+                msin=$pathMS msout=$pathMS-shift \
+                msin.datacolumn=DATA msout.datacolumn=DATA \
+                shift.phasecenter=[{target_coord.ra.deg}deg,{target_coord.dec.deg}deg]", #type: ignore
+            log="$nameMS_shift.log",
+            commandType="DP3",
+        )
+        
+        return f'{TARGET}_t{timestamp}_concat_all.MS-shift'
+    else:
+        Logger.info(f"Source is {seperation:.1f} arcmin away from phasecenter. No phase shift needed")
+        return f'{TARGET}_t{timestamp}_concat_all.MS'
+
 
 def setup() -> None:
     MSs_list = MeasurementSets( 
@@ -160,7 +203,7 @@ def setup() -> None:
             SCHEDULE.add(
                 f'DP3 {parset_dir}/DP3-avg.parset msin=\"{str(mss_toconcat)}\" \
                     msin.baseline="*&" msout={MS_concat_all} avg.freqstep=1 \
-                    avg.timestep=2',
+                    avg.timestep=1',
                 log=MS_concat_all+'_avg.log', 
                 commandType='DP3'
             )
@@ -168,11 +211,15 @@ def setup() -> None:
     
             MSs = MeasurementSets([MS_concat_all], SCHEDULE)
             
+            #demix A-team sources if needed
             demix(MSs)
             
             # Correct data from calibrator step (pa, amp, beam, iono)
             correct_from_callibrator(MSs, timestamp)
-
+            
+            #align phases to source if mismatch >5 arcmin
+            MS_concat_all = align_phasecenter(MSs, timestamp)
+            
             # bkp
             Logger.info('Making backup...')
             os.system('cp -r %s %s' % (MS_concat_all, MS_concat_bkp) ) # do not use MS.move here as it resets the MS path to the moved one
@@ -211,14 +258,17 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         final_cycle_fj = 0
         data_in = "DATA"
         
-        rms_history = np.loadtxt(f'rms_noise_history_core.csv', delimiter=",")
-        ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
-        
-        assert len(rms_history) == len(ratio_history)
-        if np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
-            correct_cycle = - 1
-        else:
-            correct_cycle = np.argmax(ratio_history) - len(ratio_history)
+        if len(solution) != 0 or len(fulljones_solution) != 0:
+            rms_history = np.loadtxt(f'rms_noise_history_core.csv', delimiter=",")
+            ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
+            
+            assert len(rms_history) == len(ratio_history)
+            if np.argmax(ratio_history) == 0:
+                correct_cycle = 1
+            elif np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
+                correct_cycle = - 1
+            else:
+                correct_cycle = np.argmax(ratio_history) - len(ratio_history)
         
         
         if len(solution) != 0:
@@ -229,7 +279,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         print(final_cycle_sol, final_cycle_fj)
         print(0 > final_cycle_sol >= final_cycle_fj)
 
-        if final_cycle_sol >= final_cycle_fj > 0:
+        if final_cycle_sol >= final_cycle_fj  and  final_cycle_sol > 0:
             Logger.info(f"correction Gain-scalar of {solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -239,9 +289,11 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                 commandType='DP3'
             )
             data_in = "CORRECTED_DATA"
+        else:
+            Logger.warning(f"No phase Core corrections found. Phase-up not recommended")
         
         
-        if final_cycle_fj >= final_cycle_sol > 0:
+        if final_cycle_fj >= final_cycle_sol and final_cycle_fj > 0:
             Logger.info(f"Correction Gain of {fulljones_solution[correct_cycle]}")
             # correcting CORRECTED_DATA -> CORRECTED_DATA
             MSs.run(
@@ -252,10 +304,8 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
                 commandType='DP3'
             )
             data_in = "CORRECTED_DATA"
-        
-  
         else:
-            Logger.warning(f"No Core corrections found. Phase-up not recommended")
+            Logger.warning(f"No fulljones Core corrections found. Phase-up not recommended")
         
         if do_test:
             run_test(MSs)
@@ -350,7 +400,7 @@ def demix(MSs: MeasurementSets):
             )
 
 
-def predict(MSs: MeasurementSets, doBLsmooth:bool = False) -> None:
+def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
     Logger.info('Preparing model...')
     sourcedb = 'tgts.skydb'
     #if not os.path.exists(sourcedb):
@@ -373,7 +423,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = False) -> None:
         )
         
     elif TARGET == "3c274":
-        os.system(f"cp /data/data/3Csurvey/tgts/3c274/tgts_ref.skymodel tgts.skymodel")
+        os.system(f"cp /data/data/3Csurvey/tgts/3c274/VirLow.skymodel tgts.skymodel")
         os.system('makesourcedb outtype="blob" format="<" in=tgts.skymodel out=tgts.skydb')
         
         # Predict MODEL_DATA
@@ -406,7 +456,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = False) -> None:
         # Smooth DATA -> DATA
         Logger.info('BL-based smoothing...')
         MSs.run(
-            '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py\
+            '/data/scripts/LiLF/scripts/BLsmooth_pol.py\
                 -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
             log='$nameMS_smooth1.log', 
             commandType='python'
@@ -427,11 +477,9 @@ def clean_specific(mode: str) -> None :
     
 def main(args: argparse.Namespace) -> None:
     stopping=False
-    #with WALKER.if_todo('setup'):
-        #set up corected data
-    setup() 
-    
     for stations in args.stations:
+        setup()
+        
         try:
             MSs = MeasurementSets(
                 glob.glob(f'*concat_{stations}.MS'), 
@@ -473,52 +521,74 @@ def main(args: argparse.Namespace) -> None:
             
         elif stations == "all":
             if args.total_cycles_all is None:
-                total_cycles = 14
+                total_cycles = 20
             else:
                 total_cycles = args.total_cycles_all
         else:
             total_cycles = 10
 
-        calibration = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, total_cycles=total_cycles, mask=masking, stats=stations)
+        calibration = pipeline.SelfCalibration(
+            MSs, 
+            schedule=SCHEDULE, 
+            total_cycles=total_cycles, 
+            mask=masking, 
+            stats=stations
+        )
         
         for cycle in calibration:
-            #calibration.empty_clean(f"img/img-empty-c{cycle}")
-            
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
-                
+                if cycle > 1:
+                    calibration.data_column = "CORRECTED_DATA"
+                    
                 if stations == "core":
                     if cycle == 1 or args.do_core_scalar_solve:
                         calibration.solve_gain('phase') 
                     
                     if not args.scalar_only and cycle > 1:
-                        calibration.solve_gain("fulljones", bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
+                        calibration.solve_gain(
+                            "fulljones", 
+                            bl_smooth_fj=args.bl_smooth_fj, 
+                            smooth_all_pols=args.smooth_all_pols
+                        )
                     
                 else:   
                     if calibration.doph:
                         calibration.solve_gain('scalar')
-                        
+                    
                     if calibration.doamp and not args.scalar_only and cycle > 1:
-                        calibration.solve_gain('fulljones', bl_smooth_fj=args.bl_smooth_fj, smooth_all_pols=args.smooth_all_pols)
+                        if args.no_fulljones:
+                            Logger.info("No fulljones, scalar amplitude solve")
+                            calibration.solve_gain("amplitude")
+                        else:
+                            calibration.solve_gain(
+                                'fulljones', 
+                                bl_smooth_fj=args.bl_smooth_fj, 
+                                smooth_all_pols=args.smooth_all_pols
+                            )
+                            
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
-                #calibration.empty_clean(f"img/img-empty-c{cycle}")
-                
                 imagename = f'img/img-{stations}-{cycle:02d}'
-                calibration.clean(imagename)
-                #calibration.clean(imagename + 'large', size=8000, predict=False)
-                rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
+                try:
+                    if cycle == 1:
+                        size=4000
+                    else:
+                        size=2000
+                        
+                    calibration.clean(imagename, apply_beam=args.apply_beam, size=size)
+                    rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
+                except RuntimeError:
+                    Logger.error(f"Failed to clean {imagename}")
+                    rms_noise_pre, mm_ratio_pre, stopping = np.inf, 0, True
+                    calibration.rms_history.append(rms_noise_pre)
+                    calibration.ratio_history.append(mm_ratio_pre)
+                    break
                 
             if stopping or cycle == calibration.stop:
-                #Logger.info("Start Peeling")                
-                #pipeline.peel(peel_mss, calibration.s)
+            #    Logger.info("Start Peeling")                
+            #    #pipeline.peel(peel_mss, calibration.s)
                 break
             
-        if stations == "all":
-            pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET)    
-            
-            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-            calibration.low_resolution_clean("img/img-low")   
-        
         with WALKER.if_todo(f"save_{stations}_history"):
             np.savetxt(
                 f'rms_noise_history_{stations}.csv', 
@@ -532,6 +602,21 @@ def main(args: argparse.Namespace) -> None:
                 delimiter=",", 
                 header="mm ratio  after every calibration cycle"
             )
+            
+            if stations == "all":
+                pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET) 
+            
+                Logger.info(f"Saving model to {TARGET}.skymodel")
+                os.system(f"python /data/scripts/revoltek-scripts/fits2sky.py \
+                    img/{TARGET}-img-final-MFS {TARGET}.skymodel --ref_freq 57.7e6 \
+                    --fits_mask img/img-all-01-mask.fits --min_peak_flux_jy 0.005"
+                )
+            
+        if stations == "all":
+            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
+            calibration.low_resolution_clean("img/img-low")   
+        
+        
     
     
     # copy the calibrated measurementsets into final file 
@@ -576,77 +661,42 @@ def do_peel():
         cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
         cal.clean(f'img/img-after-peeling')
         
-def demix3C(MSs, target: str):
-    skymodel = target + ".skymodel"
+def test_clean():
+    MSs = MeasurementSets(glob.glob(f'*concat_all.MS-phaseup'), SCHEDULE)
     
-    Logger.info('Demixing...')
-    MSs.run(
-        f'DP3 {parset_dir}/DP3-demix.parset msin=$pathMS msout=$pathMS \
-            demixer.skymodel={skymodel} \
-            demixer.instrumentmodel=$pathMS/instrument_demix \
-            demixer.subtractsources=[{target}]',
-        log='$nameMS_demix.log', 
-        commandType='DP3'
-    )
-        
-def demix_3C_test():    
-    lilf.check_rm(f'*.MS-phaseup-final-demix')
-
-    MSs_orig = MeasurementSets(
-        glob.glob(f'*.MS-phaseup-final'), 
-        SCHEDULE, 
-        check_flags=False
-    )  
-    
-    for measurement in MSs_orig.getListStr():
-        os.system('cp -r %s %s' % (measurement, measurement + "-demix") )
-    
-    MSs = MeasurementSets(
-        glob.glob(f'*.MS-phaseup-final-demix'), 
-        SCHEDULE, 
-        check_flags=False
-    )
-    
-    predict(MSs)
-    
-    # make beam region files
     masking = pipeline.make_beam_region(MSs, TARGET)
-    cal = pipeline.SelfCalibration(MSs, schedule=SCHEDULE, mask=masking)
-    cal.clean(f'img/img-pre-demix', predict=False)
-    
-    demix3C(MSs, "3c34")
-    
-    cal.clean(f'img/img-post-demix', predict=False)
-    
-    
-    
-    
-    
-def image_quick(measurements: MeasurementSets, imagename: str, data_column: str="CORRECTED_DATA", predict: bool=True):
-    Logger.info(f'imaging {imagename}... ')
-    lilf.run_wsclean(
-        SCHEDULE,
-        "wsclean-peel.log",
-        measurements.getStrWsclean(),
-        do_predict=predict,
-        name=imagename,
-        data_column=data_column,
-        size=512,
-        parallel_gridding=4,
-        baseline_averaging="",
-        scale="2.5arcsec",
-        niter=100000,
-        no_update_model_required="",
-        minuv_l=30,
-        mgain=0.4,
-        nmiter=0,
-        auto_threshold=5,
-        local_rms="",
-        local_rms_method="rms-with-min",
-        join_channels="",
-        fit_spectral_pol=2,
-        channels_out=2,
+    calibration = pipeline.SelfCalibration(
+        MSs, schedule=SCHEDULE, mask=masking, stats="all"
     )
+    
+    Logger.info('Correcting CS...')
+    fulljones_solution = sorted(glob.glob("cal-Ga*all-ampnorm.h5"))
+    solution = sorted(glob.glob("cal-Gp*all-ampnorm.h5"))
+    
+    if len(solution) != 0:
+        Logger.info(f"correction Gain-scalar of {solution[-1]}")
+        # correcting DATA -> CORRECTED_DATA
+        calibration.mss.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
+                cor.parmdb={solution[-1]} cor.correction=phase000',
+            log='$nameMS_corPH-all.log', 
+            commandType='DP3'
+        )
+    
+    if len(fulljones_solution) != 0:
+        Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
+        # correcting CORRECTED_DATA -> CORRECTED_DATA
+        calibration.mss.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
+                cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
+                cor.soltab=[amplitude000,phase000]',
+            log='$nameMS_corAMPPHslow-all.log', 
+            commandType='DP3'
+        )
+    
+    imagename = f'img/img-clean-test'
+    calibration.clean(imagename)
+    calibration.prepare_next_iter(imagename, 0, 0)
 
 
 if __name__ == "__main__":
@@ -674,8 +724,7 @@ if __name__ == "__main__":
         os.makedirs(DATA_DIR+"/data")
         os.system(f"mv {DATA_DIR}/*.MS {DATA_DIR}/data/")
     
-    #main(args) 
-    ##test_clean() 
-    do_peel()  
-    #demix_3C_test()    
+    main(args) 
+    #test_clean() 
+    #do_peel()      
     

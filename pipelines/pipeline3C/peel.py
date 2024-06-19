@@ -173,11 +173,9 @@ def load_sky(imagename: str, phasecentre: tuple, region: str|None):
     mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
     
 
-    print("PyBDSF failed, trying with auto boxsize")
     full_image.makeMask(
         mode="default",
         threshpix=5,
-        rmsbox=None,
         atrous_do=False,
         maskname=mask_ddcal,
         write_srl=True,

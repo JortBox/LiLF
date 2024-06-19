@@ -26,7 +26,7 @@ extended_targets = [
     '3c454.3','3c465','3c84', '4c73.08', 'ngc6109'
 ]
 
-very_extended_targets = ['3c138','da240','3c236', '3c31']
+very_extended_targets = ['da240','3c236', '3c31']
 
 class SelfCalibration(object):
     def __init__(
@@ -36,8 +36,13 @@ class SelfCalibration(object):
             schedule: lib_util.Scheduler,
             total_cycles: int = 10, 
             doslow: bool = False, 
-            stats: str = ""
+            stats: str = "",
+            target: str =  ""
         ):
+        global TARGET
+        if target != "":
+            TARGET = target
+        
         self.mss = MSs
         self.stop = total_cycles
         self.cycle = 0
@@ -47,15 +52,18 @@ class SelfCalibration(object):
         self.s = schedule
         
         if stats == "core":
+            self.solint_fj = lib_util.Sol_iterator([200,100,50,10])
             self.solint_amp = lib_util.Sol_iterator([200,100,50,10])
             self.solint_ph = lib_util.Sol_iterator([1])
         else:
+            self.solint_fj = lib_util.Sol_iterator([400, 200,100,50])
             self.solint_amp = lib_util.Sol_iterator([400, 200,100,50])
             self.solint_ph = lib_util.Sol_iterator([10,5,1])
         
         self.doslow = doslow
         self.doamp = False
         self.doph = True
+        self.phased_up = False
         self.data_column = "DATA"
         self.rms_history = list()
         self.ratio_history = list()
@@ -116,8 +124,10 @@ class SelfCalibration(object):
         if solint is None:
             if mode in ["phase", "scalar"]:
                 solint = next(self.solint_ph)
-            else: 
+            elif mode == "amplitude":
                 solint = next(self.solint_amp)
+            else: 
+                solint = next(self.solint_fj)
         else:
             solint = int(solint)
             
@@ -166,7 +176,7 @@ class SelfCalibration(object):
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalaramplitude \
                     sol.h5parm=$pathMS/calGsa-{self.stats}.h5 \
                     sol.modeldatacolumns=[{model_in}] \
-                    sol.solint={solint} sol.smoothnessconstraint=0.5e6',
+                    sol.solint={solint} sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGsa-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
@@ -184,7 +194,7 @@ class SelfCalibration(object):
                 [f'{ms}/calGsa-{self.stats}.h5' for ms in self.mss.getListStr()],
                 losoto_ops
             )
-        
+
             # Correct DATA -> CORRECTED_DATA
             logger.info('Correction PH...')
             command = f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column} \
@@ -212,8 +222,9 @@ class SelfCalibration(object):
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
             ]
-            #if self.stats == "all": 
-            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+            if self.stats == "all" and self.phased_up: 
+                try: losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+                except: pass
                 
             lib_util.run_losoto(
                 self.s, 
@@ -239,7 +250,7 @@ class SelfCalibration(object):
             if TARGET in extended_targets:
                 smoothcons = '1.e6'
             else:
-                smoothcons = '0.1e6'
+                smoothcons = '0.1 e6'
                 
             self.mss.run(
                 f'DP3 {parset_dir}/DP3-solG.parset msin=$pathMS \
@@ -258,10 +269,10 @@ class SelfCalibration(object):
                 parset_dir+'/losoto-plot-pol.parset'
             ]
             #if self.stats == "core":
-            losoto_ops.insert(0, f'{parset_dir}/losoto-ampnorm-full-diagonal.parset')  
-            #if self.stats == "all": 
-            #    losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
-            
+            losoto_ops.insert(0, f'{parset_dir}/losoto-ampnorm-diagonal.parset')  
+            if self.stats == "all" and self.phased_up:
+                try: losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
+                except: pass
                 
             lib_util.run_losoto(
                 self.s, 
@@ -402,19 +413,19 @@ class SelfCalibration(object):
         elif TARGET in extended_targets:
             kwargs1 = {
                 'weight': 'briggs -0.7', 
-                'multiscale_scale_bias':0.6, 
-                #'taper_gaussian': '25arcsec'
+                'multiscale_scale_bias':0.5, 
+                'taper_gaussian': '15arcsec'
             }
             kwargs2 = {
                 'weight': 'briggs -0.7',
-                'multiscale_scale_bias':0.6,  
-                #'taper_gaussian': '25arcsec', 
+                'multiscale_scale_bias':0.5,  
+                'taper_gaussian': '15arcsec', 
                 'multiscale_scales': '0,15,30,60,120,240'
             }
         else:
             kwargs1 = {'weight': 'briggs -0.8'}
             kwargs2 = {
-                'weight': 'briggs -0.6', 
+                'weight': 'briggs -0.8', 
                 'multiscale_scales': '0,10,20,40,80,160',
                 'multiscale_scale_bias':0.8, 
             }
@@ -426,8 +437,8 @@ class SelfCalibration(object):
         
         kwargs1.update({"size": size}) # type: ignore
         kwargs2.update({"size": size}) # type: ignore
-        kwargs1.update({"scale": "2.0arcsec"}) # type: ignore
-        kwargs2.update({"scale": "2.0arcsec"}) # type: ignore
+        kwargs1.update({"scale": "2arcsec"}) # type: ignore
+        kwargs2.update({"scale": "2arcsec"}) # type: ignore
             
         if self.stats == "core":
             kwargs1["size"] = 500; kwargs1["scale"] = "50.0arcsec" # type: ignore
@@ -436,7 +447,7 @@ class SelfCalibration(object):
         
         if apply_beam:
             kwargs1.update({"apply_primary_beam": ""})
-            #kwargs2.update({"apply_primary_beam": ""})
+            kwargs2.update({"apply_primary_beam": ""})
             
         if deep:
             kwargs1.update({"circular_beam": ""})
@@ -445,12 +456,15 @@ class SelfCalibration(object):
         print("kwargs1, kwargs2")   
         print(kwargs1)
         print(kwargs2)
+        
+        #all_mms = [ms.pathMS for ms in self.mss.getListObj()][0]
 
         # if next is a "cont" then I need the do_predict
         logger.info('Cleaning shallow (cycle: '+str(self.cycle)+')...')
         lib_util.run_wsclean(
             self.s, 
             'wsclean1-c%02i.log' % self.cycle, 
+            #all_mms, #
             self.mss.getStrWsclean(), 
             do_predict=predict, 
             name=imagename,
@@ -479,6 +493,7 @@ class SelfCalibration(object):
         lib_util.run_wsclean(
             self.s, 
             'wsclean2-c%02i.log' % self.cycle, 
+            #all_mms, #
             self.mss.getStrWsclean(), 
             name=imagename,
             do_predict=predict, 

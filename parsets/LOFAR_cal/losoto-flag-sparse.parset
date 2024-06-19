@@ -26,7 +26,7 @@ soltab = sol000/amplitude000
 pol = XX,YY
 axesToExt = [time,freq]
 size = [200,80]
-percent = 50
+percent = 75
 maxCycles = 2
 
 # use [time,freq] instead of just freq: it's much faster
@@ -35,7 +35,7 @@ operation = FLAGEXTEND
 soltab = sol000/amplitude000
 axesToExt = [time,freq]
 size = [1,0]
-percent = 40
+percent = 70
 maxCycles = 1
 
 [plotA2]

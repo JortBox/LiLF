@@ -127,7 +127,12 @@ def plot_optical(source: Source3C):
     
 def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size = None, annotation_color="white"):
     #levels = np.array([1.6**i for i in range(2,20)]) * source.rms
-    levels = np.array([5, 10, 50, 100, 200]) * source.rms
+    if source.name in extended_targets:
+        levels = np.array([5, 10, 50, 100, 200]) * source.rms
+    elif source.name in very_extended_targets:
+        levels = np.array([3, 5, 10, 50, 100, 200]) * source.rms
+    else:
+        levels = np.array([9, 50, 100, 200]) * source.rms
     #print(levels)
     
     fontsize = 18
@@ -142,6 +147,7 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
 
     max = restructure_fits(source.path, size = size)
     
+    
     gc = aplpy.FITSFigure('test.fits', subplot=[0., 0., .72, .8])
     
     if vmin is None:
@@ -155,10 +161,12 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     gc.add_beam(color="none", edgecolor=annotation_color)
     gc.add_label(0.495, 0.94, source.name, relative=True, size=25, color=annotation_color)
     
-    gc.add_colorbar()
-    gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
-    gc.colorbar.set_axis_label_font(size=fontsize)
-    gc.colorbar.set_font(size=fontsize)
+    #gc.add_colorbar()
+    #gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
+    #gc.colorbar.set_axis_label_font(size=fontsize)
+    #gc.colorbar.set_font(size=fontsize)
+    axes = aplpy.AxisLabels(gc)
+    axes.hide()
     
     display_scale = (size/4 * source.pixScale * scale).to(u.Mpc)
     if display_scale.value < 1:
@@ -182,17 +190,17 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     plt.clf()
     
 if __name__ == "__main__":
-    DATA_DIR = "/data/data/3Csurvey/tgts/"
+    DATA_DIR = "/home/iranet/groups/lofar/j.boxelaar/products/3Csurvey"
     
     
-    all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}*"))]
+    all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}/*"))]
     catalog = asis.Catalogue3C(all_targets)
     
     for source in catalog:
         if source.name in ["3c296"]:
             continue
         
-        paths = sorted(glob.glob(f"{DATA_DIR}{source.name}/img/img-all-*-MFS-image.fits"))
+        paths = sorted(glob.glob(f"{DATA_DIR}/{source.name}/img/img-all-*-MFS-image.fits"))
         if len(paths) <= 1:
             print(f"Failed to plot {source.name}")
             continue
@@ -210,7 +218,7 @@ if __name__ == "__main__":
         elif source.name in very_extended_targets:
             size = int(source.data.shape[0]//2)
         else:
-            size=400
+            size=300
             
         plot_galaxy(source, vmax=1., vmin=-4.*source.rms.value, size=size)
         

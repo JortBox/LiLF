@@ -127,11 +127,11 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
     Logger.info('Apply solutions (iono)...')
     MSs.run(
         f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA\
-            cor.parmdb={h5_iono} cor.correction=phase000', 
+            msout.datacolumn=DATA cor.parmdb={h5_iono} cor.correction=phase000', 
         log='$nameMS_cor1_iono.log', 
         commandType='DP3'
     )
-
+    '''
     # Move CORRECTED_DATA -> DATA
     Logger.info('Move CORRECTED_DATA -> DATA...')
     MSs.run(
@@ -139,7 +139,7 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
         log='$nameMS_taql.log', 
         commandType='general'
     )
-
+    #'''
 
 def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
     phasecenter = MSs.getListObj()[0].getPhaseCentre()
@@ -482,7 +482,7 @@ def main(args: argparse.Namespace) -> None:
         
         try:
             MSs = MeasurementSets(
-                glob.glob(f'*concat_{stations}.MS'), 
+                sorted(glob.glob(f'*concat_{stations}.MS')), 
                 SCHEDULE, 
                 check_flags=False
             )   
@@ -532,8 +532,13 @@ def main(args: argparse.Namespace) -> None:
             schedule=SCHEDULE, 
             total_cycles=total_cycles, 
             mask=masking, 
-            stats=stations
+            stats=stations,
+            target=TARGET
         )
+        if args.no_phaseup:
+            calibration.phased_up = False
+        else:
+            calibration.phased_up = True
         
         for cycle in calibration:
             #calibration.empty_clean(f"img/img-empty-c{cycle}")
@@ -550,8 +555,15 @@ def main(args: argparse.Namespace) -> None:
                             bl_smooth_fj=args.bl_smooth_fj, 
                             smooth_all_pols=args.smooth_all_pols
                         )
+                        
+                        #calibration.solve_gain('amplitude')
+                        
                     
-                else:   
+                else:
+                    if cycle > 15 and not calibration.doamp:
+                        calibration.doamp = True
+                        Logger.info("Amplitude solve activated")
+                           
                     if calibration.doph:
                         calibration.solve_gain('scalar')
                     
@@ -565,6 +577,8 @@ def main(args: argparse.Namespace) -> None:
                                 bl_smooth_fj=args.bl_smooth_fj, 
                                 smooth_all_pols=args.smooth_all_pols
                             )
+                            # Do extra amp solve to do the ampnorm afterwards 
+                            
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 #calibration.empty_clean(f"img/img-empty-c{cycle}")

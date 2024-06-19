@@ -17,7 +17,7 @@ def make_mask(image_name, mask_name=None, threshpix=5, atrous_do=False, rmsbox=(
     # DO THE SOURCE DETECTION
     img = bdsf.process_image(image_name, rms_box=rmsbox, frequency=58e6,
         thresh_isl=float(threshpix*3./5), thresh_pix=float(threshpix), rms_map=True, mean_map='zero', atrous_do=atrous_do, atrous_jmax=4, # NOTE: thresh_isl = float(threshpix*4./5)
-        adaptive_rms_box=True, adaptive_thresh=adaptive_thresh, rms_box_bright=None,#(30,5),
+        adaptive_rms_box=True, adaptive_thresh=adaptive_thresh, rms_box_bright=(30,5),
         flagging_opts=True, flag_maxsize_fwhm=0.5, stop_at=stop_at, quiet=True, debug=False)
 
     # WRITE THE MASK FITS

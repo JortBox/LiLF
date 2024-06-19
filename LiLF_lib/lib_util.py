@@ -57,7 +57,7 @@ def getParset(parsetFile=''):
     add_default('LOFAR_preprocess', 'fix_table', 'True') # fix bug in some old observations
     add_default('LOFAR_preprocess', 'renameavg', 'True')
     add_default('LOFAR_preprocess', 'flag_elev', 'True')
-    add_default('LOFAR_preprocess', 'keep_IS', 'False')
+    add_default('LOFAR_preprocess', 'keep_IS', 'True')
     add_default('LOFAR_preprocess', 'backup_full_res', 'False')
     # demix
     add_default('LOFAR_demix', 'data_dir', 'data-bkp/')
@@ -69,6 +69,8 @@ def getParset(parsetFile=''):
   
     add_default('LOFAR_cal', 'skymodel', '') # by default use calib-simple.skydb for LBA and calib-hba.skydb for HBA
     add_default('LOFAR_cal', 'imaging', 'False')
+    add_default('LOFAR_cal', 'fillmissingedges', 'True')
+    add_default('LOFAR_cal', 'sparse_sb', 'False') # change flagging so that we can handle data with alternating SBs only
     # timesplit
     add_default('LOFAR_timesplit', 'data_dir', 'data-bkp/')
     add_default('LOFAR_timesplit', 'copy_dir', './data-copy-timesplit/')

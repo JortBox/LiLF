@@ -8,7 +8,7 @@
 import sys, os, glob, re
 import numpy as np
 
-LOCATION = "/net/voorrijn/data2/boxelaar/scripts/LiLF_dev"
+LOCATION = "/home/local/work/j.boxelaar/scripts/LiLF/"
 sys.path.append(LOCATION)
 
 ########################################################
@@ -23,7 +23,6 @@ parset = lib_util.getParset()
 logger.info('Parset: '+str(dict(parset['LOFAR_cal'])))
 parset_dir = parset.get('LOFAR_cal','parset_dir')
 data_dir = parset.get('LOFAR_cal','data_dir')
-data_dir = parset.get('LOFAR_cal','data_dir')
 copy_dir = parset.get('LOFAR_cal', 'copy_dir')
 skymodel = parset.get('LOFAR_cal','skymodel')
 imaging = parset.getboolean('LOFAR_cal','imaging')
@@ -32,8 +31,7 @@ bl2flag = parset.get('flag','stations')
 #############################################################
 
 with w.if_todo('copy'):
-
-    logger.info('Copy data...r')
+    logger.info('Copy data...')
     MSs = lib_ms.AllMSs( glob.glob(data_dir+'/*MS'), s, check_flags=False)
 
     for MS in MSs.getListObj():
@@ -80,7 +78,7 @@ with w.if_todo('flag'):
 
     # extend flags
     logger.info('Remove bad time/freq stamps...')
-    MSs.run( '/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/flagonmindata.py -f 0.5 $pathMS', log='$nameMS_flagonmindata.log', commandType='python')
+    MSs.run( '/home/local/work/j.boxelaar/scripts/LiLF/scripts/flagonmindata.py -f 0.5 $pathMS', log='$nameMS_flagonmindata.log', commandType='python')
 
 ### DONE
 
@@ -99,7 +97,7 @@ with w.if_todo('predict'):
 with w.if_todo('cal_pa'):
     # Smooth data DATA -> SMOOTHED_DATA (BL-based smoothing)
     logger.info('BL-smooth...')
-    MSs.run(f'/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth1.log',
+    MSs.run(f'/home/local/work/j.boxelaar/scripts/LiLF/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth1.log',
             commandType='python', maxThreads=8)
 
     # Solve cal_SB.MS:SMOOTHED_DATA (only solve)
@@ -129,11 +127,11 @@ with w.if_todo('cal_fr'):
     # Smooth data CORRECTED_DATA -> CIRC_PHASEDIFF_DATA (BL-based smoothing)
     logger.info('BL-smooth...')
     MSs.addcol('CIRC_PHASEDIFF_DATA', 'CORRECTED_DATA', usedysco=False) # need this to make sure no dysco, if we have dyso we cannot set values to zero
-    MSs.run(f'/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CIRC_PHASEDIFF_DATA -o CIRC_PHASEDIFF_DATA $pathMS', log='$nameMS_smooth2.log',
+    MSs.run(f'/home/local/work/j.boxelaar/scripts/LiLF/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CIRC_PHASEDIFF_DATA -o CIRC_PHASEDIFF_DATA $pathMS', log='$nameMS_smooth2.log',
             commandType='python', maxThreads=8)
 
     logger.info('Converting to circular...')
-    MSs.run('/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/mslin2circ.py -s -i $pathMS:CIRC_PHASEDIFF_DATA -o $pathMS:CIRC_PHASEDIFF_DATA', log='$nameMS_lincirc.log',
+    MSs.run('scripts/mslin2circ.py -s -i $pathMS:CIRC_PHASEDIFF_DATA -o $pathMS:CIRC_PHASEDIFF_DATA', log='$nameMS_lincirc.log',
             commandType='python', maxThreads=2)
     # Get circular phase diff CIRC_PHASEDIFF_DATA -> CIRC_PHASEDIFF_DATA
     logger.info('Get circular phase difference...')
@@ -186,19 +184,23 @@ with w.if_todo('cal_fr'):
     # Smooth data CORRECTED_DATA -> CIRC_PHASEDIFF_DATA (BL-based smoothing)
     logger.info('BL-smooth...')
     MSs.addcol('CIRC_PHASEDIFF_DATA', 'CORRECTED_DATA', usedysco=False) # need this to make sure no dysco, if we have dyso we cannot set values to zero
-    MSs.run(f'/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/BLsmooth.py -r -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CIRC_PHASEDIFF_DATA -o CIRC_PHASEDIFF_DATA $pathMS', log='$nameMS_smooth2.log',
+    MSs.run(f'/home/local/work/j.boxelaar/scripts/LiLF/scripts/BLsmooth.py -r -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CIRC_PHASEDIFF_DATA -o CIRC_PHASEDIFF_DATA $pathMS', log='$nameMS_smooth2.log',
             commandType='python', maxThreads=8)
 
     logger.info('Converting to circular...')
-    MSs.run('/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/mslin2circ.py -s -i $pathMS:CIRC_PHASEDIFF_DATA -o $pathMS:CIRC_PHASEDIFF_DATA', log='$nameMS_lincirc.log',
+    MSs.run('/home/local/work/j.boxelaar/scripts/LiLF/scripts/mslin2circ.py -s -i $pathMS:CIRC_PHASEDIFF_DATA -o $pathMS:CIRC_PHASEDIFF_DATA', log='$nameMS_lincirc.log',
             commandType='python', maxThreads=2)
     # Get circular phase diff CIRC_PHASEDIFF_DATA -> CIRC_PHASEDIFF_DATA
     logger.info('Get circular phase difference...')
-    MSs.run('taql "UPDATE $pathMS SET\
-     CIRC_PHASEDIFF_DATA[,0]=0.5*EXP(1.0i*(PHASE(CIRC_PHASEDIFF_DATA[,0])-PHASE(CIRC_PHASEDIFF_DATA[,3]))), \
-     CIRC_PHASEDIFF_DATA[,3]=CIRC_PHASEDIFF_DATA[,0], \
-     CIRC_PHASEDIFF_DATA[,1]=0+0i, \
-     CIRC_PHASEDIFF_DATA[,2]=0+0i"',log='$nameMS_taql_phdiff.log', commandType='general')
+    MSs.run(
+        'taql "UPDATE $pathMS SET \
+            CIRC_PHASEDIFF_DATA[,0]=0.5*EXP(1.0i*(PHASE(CIRC_PHASEDIFF_DATA[,0])-PHASE(CIRC_PHASEDIFF_DATA[,3]))), \
+            CIRC_PHASEDIFF_DATA[,3]=CIRC_PHASEDIFF_DATA[,0], \
+            CIRC_PHASEDIFF_DATA[,1]=0+0i, \
+            CIRC_PHASEDIFF_DATA[,2]=0+0i"',
+        log='$nameMS_taql_phdiff.log', 
+        commandType='general'
+    )
 
     logger.info('Creating FR_MODEL_DATA...') # take from MODEL_DATA but overwrite
     MSs.addcol('FR_MODEL_DATA', 'MODEL_DATA', usedysco=False) # need this to make sure no dysco, if we have dyso we cannot set values to zero
@@ -230,7 +232,7 @@ with w.if_todo('cal_fr'):
 with w.if_todo('cal_bp'):
     # Smooth data CORRECTED_DATA -> SMOOTHED_DATA (BL-based smoothing)
     logger.info('BL-smooth...')
-    MSs.run(f'/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth3.log',
+    MSs.run(f'/home/local/work/j.boxelaar/scripts/LiLF/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth3.log',
             commandType ='python', maxThreads=8)
 
     # Solve cal_SB.MS:SMOOTHED_DATA (only solve)
@@ -286,7 +288,7 @@ with w.if_todo('apply_all'):
 with w.if_todo('cal_iono'):
     # Smooth data CORRECTED_DATA -> SMOOTHED_DATA (BL-based smoothing)
     logger.info('BL-smooth...')
-    MSs.run(f'/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth4.log',
+    MSs.run(f'/home/local/work/j.boxelaar/scripts/LiLF/scripts/BLsmooth.py -r -q -c 1 -n 8 -f {1e-2 if MSs.isLBA else .2e-3} -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth4.log',
             commandType ='python', maxThreads=8)
 
     # Solve cal_SB.MS:SMOOTHED_DATA (only solve)
@@ -366,7 +368,7 @@ if imaging:
 
         # Smooth data CORRECTED_DATA -> SMOOTHED_DATA (BL-based smoothing)
         logger.info('BL-smooth...')
-        MSs.run('/net/voorrijn/data2/boxelaar/scripts/LiLF_dev/scripts/BLsmooth.py -r -q -c 1 -n 8 -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth4.log',
+        MSs.run('/home/local/work/j.boxelaar/scripts/LiLF/scripts/BLsmooth.py -r -q -c 1 -n 8 -i CORRECTED_DATA -o SMOOTHED_DATA $pathMS', log='$nameMS_smooth4.log',
                 commandType ='python', maxThreads=8)
         
         # Solve cal_SB.MS:SMOOTHED_DATA (only solve)

@@ -1,35 +1,34 @@
 Ncpu = 0
 
-[plotP1]
+[plotA1]
 operation = PLOT
-soltab = sol000/phase000
+Soltab = sol000/amplitude000
 freq.minmaxstep = [0,300e6,100]
 axesInPlot = time
 axisInTable = ant
+axisInCol = pol
 plotFlag = True
-prefix = plots/ph_
-refAnt = SuperSt
-minmax = [-3.14,3.14]
+prefix = plots/amp_
 NColFig = 4
 figSize = [20,20]
+#minmax = [0,300]
 
-[plotP2]
+[plotA2]
 operation = PLOT
-soltab = sol000/phase000
+soltab = sol000/amplitude000
 time.minmaxstep = [0,1e20,1000]
 axesInPlot = freq
 axisInTable = ant
+axisInCol = pol
 plotFlag = True
-prefix = plots/ph_
-refAnt = SuperSt
-minmax = [-3.14,3.14]
+prefix = plots/amp_
+#minmax = [0,300]
 
-[plotP3]
+[plotA3]
 operation = PLOT
-soltab = sol000/phase000
+soltab = sol000/amplitude000
 axesInPlot = [time,freq]
 axisInTable = ant
 plotFlag = True
-prefix = plots/ph_
-refAnt = SuperSt
-minmax = [-3.14,3.14]
+prefix = plots/amp_
+#minmax = [0,300]
