@@ -192,7 +192,7 @@ def setup() -> None:
         MS_concat_all = f'{TARGET}_t{timestamp}_concat_all.MS'
         MS_concat_bkp = f'{TARGET}_t{timestamp}_concat.MS-bkp'
     
-        if os.path.exists(MS_concat_bkp): 
+        if os.path.exists(MS_concat_bkp): # Change: remove not
             Logger.info('Restoring bkp data: %s...' % MS_concat_bkp)
             lilf.check_rm(MS_concat_all)
             lilf.check_rm(MS_concat_core)
@@ -211,14 +211,30 @@ def setup() -> None:
     
             MSs = MeasurementSets([MS_concat_all], SCHEDULE)
             
+            # flag bad stations, and low-elev
+            Logger.info('Flagging...')
+            MSs.run('DP3 '+parset_dir+'/DP3-flag.parset msin=$pathMS msout=. \
+                     aoflagger.strategy='+parset_dir+'/LBAdefaultwideband.lua ant.baseline=\"'+bl2flag+'\"',
+                     log='$nameMS_flag.log', commandType='DP3')
+            
             #demix A-team sources if needed
             demix(MSs)
             
+            Logger.info('Beam correction (beam)...')
+            MSs.run(
+                'DP3 '+parset_dir+'/DP3-beam.parset msin=$pathMS msin.datacolumn=DATA \
+                    msout.datacolumn=DATA corrbeam.updateweights=True', 
+                log='$nameMS_cor1_beam.log', 
+                commandType='DP3'
+            )
+            
             # Correct data from calibrator step (pa, amp, beam, iono)
-            correct_from_callibrator(MSs, timestamp)
+            #correct_from_callibrator(MSs, timestamp)
             
             #align phases to source if mismatch >5 arcmin
-            MS_concat_all = align_phasecenter(MSs, timestamp)
+            try: MS_concat_all = align_phasecenter(MSs, timestamp)
+            except:
+                Logger.warning("No Internet connection, skipping phasecenter alignment")
             
             # bkp
             Logger.info('Making backup...')
@@ -270,6 +286,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
             else:
                 correct_cycle = np.argmax(ratio_history) - len(ratio_history)
         
+        print(correct_cycle)
         
         if len(solution) != 0:
             final_cycle_sol = int(solution[-1].split("-")[2][1:])
@@ -538,7 +555,7 @@ def main(args: argparse.Namespace) -> None:
         if args.no_phaseup:
             calibration.phased_up = False
         else:
-            calibration.phased_up = True
+            calibration.phased_up = True 
         
         for cycle in calibration:
             #calibration.empty_clean(f"img/img-empty-c{cycle}")

@@ -70,9 +70,90 @@ def clean_peeling_dir(msets_list: list[str]):
     for ms in msets_list:
         os.system('cp -r %s %s' % (ms, ms + "-peel") )
         
+def predict_field(msets: MeasurementSets, region_file: str|None, imagenameM: str, predict: bool = True, uvlambdamin: int = 30, size: int = 2500, apply_beam: bool = False) -> None:
+        # special for extended sources:
+        imagename_pre = imagenameM + "pre"
+        lib_util.check_rm(imagename_pre + "*")
+        lib_util.check_rm(imagenameM + "*")
+        print("TARGET:", TARGET)
+
+        kwargs1 = {'weight': 'briggs -0.8'}
+        kwargs2 = {
+            'weight': 'briggs -0.8', 
+            'multiscale_scales': '0,10,20,40,80,160',
+            'multiscale_scale_bias':0.8, 
+        }
         
+        kwargs1.update({"size": size}) # type: ignore
+        kwargs2.update({"size": size}) # type: ignore
+        kwargs1.update({"scale": "2arcsec"}) # type: ignore
+        kwargs2.update({"scale": "2arcsec"}) # type: ignore
         
-def predict_field(msets: MeasurementSets, region_file: str|None, imagenameM: str, predict: bool = True):
+        if apply_beam:
+            kwargs1.update({"apply_primary_beam": ""})
+            kwargs2.update({"apply_primary_beam": ""})
+
+        logger.info("Cleaning wide 1...")
+        lib_util.run_wsclean(
+            msets.scheduler, 
+            "wsclean-wide.log",
+            #all_mms, #
+            msets.getStrWsclean(), 
+            do_predict=predict, 
+            name=imagenameM,
+            parallel_gridding=4, 
+            baseline_averaging='',
+            niter=1000, 
+            no_update_model_required='',
+            #circular_beam='',
+            save_source_list='',
+            minuv_l=uvlambdamin, 
+            mgain=0.4, 
+            nmiter=0,
+            auto_threshold=5, 
+            local_rms='', 
+            local_rms_method='rms-with-min',
+            join_channels='', 
+            fit_spectral_pol=2, 
+            channels_out=2, 
+            **kwargs1
+        )
+        
+        # makemask
+        region_file = None
+        im = lib_img.Image(imagename_pre + "-MFS-image.fits", userReg=region_file)
+        im.makeMask(mode="breizorro", threshpix=5, rmsbox=(100, 25), schedule=msets.scheduler)
+        maskfits = imagename_pre + "-mask.fits"
+
+        logger.info("Cleaning wide 2...")
+        lib_util.run_wsclean(
+            msets.scheduler, 
+            "wsclean-wide.log",
+            #all_mms, #
+            msets.getStrWsclean(), 
+            name=imagenameM,
+            do_predict=predict, 
+            cont=True, 
+            parallel_gridding=4,
+            niter=1000000, 
+            no_update_model_required='',
+            #circular_beam='',
+            minuv_l=uvlambdamin,
+            mgain=0.4, 
+            nmiter=0,
+            auto_threshold=0.5, 
+            auto_mask=2., 
+            local_rms='', 
+            local_rms_method='rms-with-min', 
+            fits_mask=maskfits,
+            multiscale='',
+            join_channels='', 
+            fit_spectral_pol=2, 
+            channels_out=2, 
+            **kwargs2
+        )        
+        
+def predict_field_old(msets: MeasurementSets, region_file: str|None, imagenameM: str, predict: bool = True):
     imagename_pre = imagenameM + "pre"
     lib_util.check_rm(imagename_pre + "*")
     lib_util.check_rm(imagenameM + "*")
@@ -258,12 +339,21 @@ def phaseshift_to_source(msets: MeasurementSets, source, column_in:str="DATA") -
     msets.run(
         f"DP3 {PARSET_DIR}/DP3-shiftavg.parset msin=$pathMS \
             msout=mss-dir/$nameMS.MS msin.datacolumn={column_in} \
-            msout.datacolumn=DATA avg.timestep=8 avg.freqstep=8 \
+            msout.datacolumn=DATA avg.timestep=2 avg.freqstep=8 \
             shift.phasecenter=[{source['RA']}deg,{source['DEC']}deg]",
         log="$nameMS_shift.log",
         commandType="DP3",
     )
-    return MeasurementSets(glob.glob("mss-dir/*.MS"), SCHEDULE)
+    
+    msets_shift = MeasurementSets(glob.glob("mss-dir/*.MS"), SCHEDULE)
+    #logger.info("correcting beam...")
+    #msets_shift.run(
+    #    f'DP3 {PARSET_DIR}/DP3-beam.parset msin=$pathMS corrbeam.invert=True \
+    #        msin.datacolumn=DATA msout.datacolumn=DATA', 
+    #    log='$nameMS_beam.log',
+    #    commandType='DP3'
+    #)
+    return msets_shift
 
 
 def calibrate(msets: MeasurementSets, mode: str, name: str):
@@ -274,7 +364,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             + PARSET_DIR
             + "/DP3-solG.parset msin=$pathMS msin.datacolumn=DATA \
                 sol.h5parm=$pathMS/calGp-peel.h5 sol.mode=scalarphase \
-                sol.solint=1",
+                sol.solint=2 sol.smoothnessconstraint=1e6",
             log="$nameMS_solGp-peel.log",
             commandType="DP3",
         )
@@ -292,7 +382,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
         
         logger.info('Correction PH...')
         command = f'DP3 {PARSET_DIR}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
-            cor.parmdb=cal-Gp-peel_{name}.h5 cor.correction=phase000' 
+            msout.datacolumn=CORRECTED_DATA cor.parmdb=cal-Gp-peel_{name}.h5 cor.correction=phase000' 
         msets.run(
             command, 
             log=f'$nameMS_corGph-peel-{name}.log', 
@@ -309,7 +399,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             + PARSET_DIR
             + "/DP3-solG.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
                 sol.h5parm=$pathMS/calGa.h5 sol.mode=fulljones \
-                sol.solint=20 ",
+                sol.solint=20 sol.smoothnessconstraint=0.5e6",
             log="$nameMS_solGa-peel.log",
             commandType="DP3",
         )
@@ -319,7 +409,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
             f"Ga-peel_{name}",
             [ms + "/calGa.h5" for ms in msets.getListStr()],
             [
-                #PARSET_DIR + "/losoto-ampnorm-full-diagonal.parset",
+                PARSET_DIR + "/losoto-ampnorm-diagonal.parset",
                 PARSET_DIR + "/losoto-plot2d.parset",
                 PARSET_DIR+'/losoto-plot2d-pol.parset', 
                 PARSET_DIR+'/losoto-plot-pol.parset'
@@ -329,7 +419,7 @@ def calibrate(msets: MeasurementSets, mode: str, name: str):
         
         logger.info('Correction slow AMP+PH...')
         command = f'DP3 {PARSET_DIR}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
-            cor.parmdb=cal-Ga-peel_{name}.h5 cor.correction=fulljones \
+            msout.datacolumn=CORRECTED_DATA cor.parmdb=cal-Ga-peel_{name}.h5 cor.correction=fulljones \
             cor.soltab=[amplitude000,phase000]'  
         msets.run(
             command,
@@ -362,13 +452,15 @@ def corrupt(msets: MeasurementSets, solution: str):
     if "Gp" in solution:
         correction = "phase000"
         soltab = ""
+        column_in = "MODEL_DATA"
     elif "Ga" in solution:
         correction = "fulljones"
         soltab = "cor.soltab=[amplitude000,phase000]"    
+        column_in = "CORRUPTED_MODEL_DATA"
     
     msets.run( # was MSs
         f"DP3 {PARSET_DIR}/DP3-cor.parset msin=$pathMS \
-            msin.datacolumn=MODEL_DATA msout.datacolumn=MODEL_DATA \
+            msin.datacolumn={column_in} msout.datacolumn=CORRUPTED_MODEL_DATA \
             cor.invert=False cor.parmdb={solution} \
             cor.correction={correction} {soltab}",
         log="$nameMS_corrupt.log",
@@ -378,17 +470,24 @@ def corrupt(msets: MeasurementSets, solution: str):
 
 
 def subtract_model(
-    msets: MeasurementSets, column_in: str = "DATA", column_out: str = "DATA"
+    msets: MeasurementSets, 
+    column_in: str = "CORRECTED_DATA", 
+    column_out: str = "CORRECTED_DATA",
+    model: str = "MODEL_DATA"
 ):
+    logger.info(f'Subtract model: {column_out} = {column_in} - {model}...')
     msets.run(
-        f'taql "update $pathMS set {column_in} = {column_out} - MODEL_DATA"',
+        f'taql "update $pathMS set {column_out} = {column_in} - {model}"',
         log="$nameMS_taql.log",
         commandType="general",
     )
     
 def add_model(
-    msets: MeasurementSets, column_in: str = "DATA", column_out: str = "DATA"
+    msets: MeasurementSets, 
+    column_in: str = "CORRECTED_DATA", 
+    column_out: str = "CORRECTED_DATA"
 ):
+    logger.info(f'add model: {column_out} = {column_in} - MODEL_DATA...')
     msets.run(
         f'taql "update $pathMS set {column_out} = {column_in} + MODEL_DATA"',
         log="$nameMS_taql.log",
@@ -411,9 +510,12 @@ def peel(
     
     with WALKER.if_todo("predict-field"):    
         predict_field(mss_peel, region, imagename)
+        subtract_model(mss_peel)
+        image_quick(mss_peel, f"img/after-field-sub-empty", predict=False, empty=True, wide=True, data_column="CORRECTED_DATA")
     
     phasecentre = mss_peel.getListObj()[0].getPhaseCentre()
     bright_sources = load_sky(imagename, phasecentre, region)
+    
     central_sources = bright_sources[bright_sources["dist"]<0.1]
     satellite_sources = bright_sources[bright_sources["dist"] >= 0.1]
     
@@ -437,7 +539,8 @@ def peel(
             os.makedirs("mss-dir")
             
             # subtract model from data in new column
-            
+            isolate_source_model(mss_peel, source, imagename)
+            add_model(mss_peel)
             mss_shift = phaseshift_to_source(mss_peel, source, column_in="CORRECTED_DATA")
             # primary beam correction
             
@@ -451,7 +554,7 @@ def peel(
             
             
             solutions.append(calibrate(mss_shift, "scalar", name))
-            solutions.append(calibrate(mss_shift, "fulljones", name))
+            #solutions.append(calibrate(mss_shift, "fulljones", name))
             
             # we somehow have to subtract the source from mss_peel, with info from mss_shift
             # assume just corrupting works works for that
@@ -464,19 +567,19 @@ def peel(
                 image_quick(mss_peel, f"peel-{name}/data-before", data_column="CORRECTED_DATA", predict=False, empty=True)
                 
             
-            isolate_source_model(mss_peel, source, imagename)
+            #isolate_source_model(mss_peel, source, imagename)
             
             for sol in solutions:
                 corrupt(mss_peel, sol)
             
             if do_test:
-                image_quick(mss_peel, f"peel-{name}/model-after-corrupt", data_column="MODEL_DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_peel, f"peel-{name}/model-after-corrupt", data_column="CORRUPTED_MODEL_DATA", predict=False, empty=True, wide=True)
             
-            subtract_model(mss_peel, column_in="CORRECTED_DATA", column_out="DATA")
+            subtract_model(mss_peel, column_in="CORRECTED_DATA", column_out="DATA", model="CORRUPTED_MODEL_DATA")
 
             if do_test:
                 #image_quick(mss_peel, f"peel-{name}/after-peel", data_column="DATA", predict=False)
-                image_quick(mss_peel, f"peel-{name}/data-wide-after", data_column="CORRECTED_DATA", predict=False, empty=True, wide=True)
+                image_quick(mss_peel, f"peel-{name}/data-wide-after", data_column="DATA", predict=False, empty=True, wide=True)
                 #predict_field(mss_peel, region, f"peel-{name}/wide-after")
                 
             add_model(mss_peel)
@@ -502,17 +605,18 @@ if __name__ == "__main__":
     PARSET_DIR = parset.get("LOFAR_3c_core", "parset_dir")
 
 
-    stats = "core"
+    stats = "phaseup"
     with WALKER.if_todo(f"setup-{stats}"):
-        setup()
+        #setup()
         
-        original_mss = MeasurementSets(glob.glob(f'*{stats}.MS'), SCHEDULE,) 
+        original_mss = MeasurementSets(glob.glob(f'*.MS-phaseup'), SCHEDULE) 
         
+        #all_fj_solutions = sorted(glob.glob("cal-G0*all*.h5"))
         solutions = [
-            "cal-Gph-c03-core-ampnorm.h5", 
-            "cal-Ga-c03-core-ampnorm.h5",
-            #"cal-Gp-c03-all-ampnorm.h5", 
-            #"cal-Ga-c03-all-ampnorm.h5",
+            #"cal-Gph-c03-core-ampnorm.h5", 
+            #"cal-Ga-c03-core-ampnorm.h5",
+            "cal-Gp-c06-all-ampnorm.h5", 
+            "cal-Ga-c06-all-ampnorm.h5",
         ]
         column_in = "DATA"
         for sol in solutions:
@@ -521,5 +625,5 @@ if __name__ == "__main__":
     
     # apply solutions from solsets (core first then remote as well)
     # try peeling on core data first, then try for all dutch stations 
-    original_mss = MeasurementSets(glob.glob(f'*{stats}.MS'), SCHEDULE,) 
+    original_mss = MeasurementSets(glob.glob(f'*.MS-phaseup'), SCHEDULE) 
     peel(original_mss.getListStr(), SCHEDULE, peel_max=1, do_test=True)

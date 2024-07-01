@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from astropy.units.quantity import Quantity
 
 from astroquery.vizier import Vizier 
+from astroquery.simbad import Simbad 
 from astroquery.ipac.ned import Ned
 from astropy.coordinates import SkyCoord
 from astropy.table import Table as AstroTab
@@ -227,16 +228,17 @@ class Source3C(object):
 
 
 class Catalogue3C(object):
-    def __init__(self, targets: list[str], suffix: str = ""):
+    def __init__(self, targets: list[str], suffix: str = "", use_cache: bool = True):
         self._counter = 0
         self.targets = targets 
         if suffix == "":
             self.suffix = suffix
         else:
             self.suffix = "_" + suffix
-            
-        self.__query_objects_ned(targets)
-        self.__query_objects_vizier(targets)
+        
+        self.__query_objects_simbad(targets)    
+        #self.__query_objects_ned(targets, use_cache=use_cache)
+        #self.__query_objects_vizier(targets)
         #self.save()
         
     def __len__(self) -> int:
@@ -294,6 +296,37 @@ class Catalogue3C(object):
     def display_name(self) -> list[str]:
         return [source.display_name for source in self.sources]
     
+    def __query_objects_simbad(self, targets: list[str]) -> None:
+        self.sources_dict = dict()
+        self.sources = list()
+        
+        for i, target in enumerate(targets):
+            if target.endswith("b"):
+                target = target[:-1]
+            elif target.endswith("a"):
+                target = target[:-1]
+            table = Simbad.query_object(target)
+            source = Source3C(target)
+                
+            try: source.set_redshift(float(table["Redshift"])) # type: ignore
+            except: source.set_redshift(0.1)
+            
+            try:
+                source.set_coord(
+                    SkyCoord(
+                        ra = float(table["RA"]),  # type: ignore
+                        dec = float(table["DEC"]),  # type: ignore
+                        unit = (u.deg, u.deg), 
+                        frame = 'fk4'
+                    )
+                )
+            except:
+                source.set_coord(
+                    SkyCoord(ra=0.0, dec=0.0, unit=(u.deg, u.deg), frame='fk4') # type: ignore
+                )
+                
+            self.sources_dict.update({target: i})
+            self.sources.append(source)
 
     def __query_objects_vizier(self, targets: list[str]) -> None:
         targets = np.asarray(targets) # type: ignore
@@ -313,12 +346,15 @@ class Catalogue3C(object):
                 self[name].SED.insert(entry["S178MHz"] * u.Jy, freq=178.*u.MHz)
                 
         
-    def __query_objects_ned(self, targets: list[str]) -> None:
+    def __query_objects_ned(self, targets: list[str], use_cache: bool = True) -> None:
         self.sources_dict = dict()
         self.sources = list()
         
+        if not use_cache:
+            Ned.clear_cache()
+        
         for i, target in enumerate(targets):
-            print(f"querying target {i+1} of {len(self)}")
+            print(f"querying target {target}, {i+1} of {len(self)}")
             table = Ned.query_object(target, verbose = False)
             source = Source3C(target)
                 

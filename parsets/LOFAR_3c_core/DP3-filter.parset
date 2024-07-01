@@ -7,5 +7,5 @@ msout.overwrite = True
 steps = [filter]
 
 filter.type = filter
-filter.baseline = ^RS*&&
+filter.baseline = CS*&&
 filter.remove = True

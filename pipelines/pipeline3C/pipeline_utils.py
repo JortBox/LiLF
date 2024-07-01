@@ -28,13 +28,19 @@ CS_list = [
     'CS103LBA','CS201LBA','CS301LBA','CS302LBA','CS401LBA','CS501LBA',
 ]
 
-def get_cal_dir(timestamp: str, logger = None) -> list:
+def get_cal_dir(timestamp: str, logger = None, int_data = False) -> list:
     """
     Get the proper cal directory from a timestamp
     """
     
     dirs = list()
-    for cal_dir in sorted(glob.glob('../../cals/3c*')):
+    if int_data:
+        cal_directories = sorted(glob.glob('/home/iranet/groups/lofar/j.boxelaar/data/icals/3c*'))
+    else:
+        cal_directories = sorted(glob.glob('/data/data/3Csurvey/cals/3c*'))
+        
+        
+    for cal_dir in cal_directories:
         calibrator = cal_dir.split("/")[-1]
         cal_timestamps = set()
         for ms in glob.glob(cal_dir+'/20*/data-bkp/*MS'):
@@ -51,7 +57,6 @@ def get_cal_dir(timestamp: str, logger = None) -> list:
         if logger is not None:
             logger.error('Missing calibrator.')
         sys.exit()
-    
     return dirs
 
 def rename_final_images(files: list[str], target: str = ""):

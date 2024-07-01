@@ -4,8 +4,7 @@
 import sys, os
 import numpy as np
 
-sys.path.append("/localdata/scripts/LiLF")
-
+#sys.path.append("/localdata/scripts/LiLF")
 from LiLF_lib import lib_img, lib_util, lib_log
 from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 
@@ -23,10 +22,12 @@ extended_targets = [
     '3c285','3c293','3c296','3c31',
     '3c310','3c326',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
-    '3c454.3','3c465','3c84', '4c73.08', 'ngc6109'
+    '3c454.3','3c465','3c84', '4c73.08', 'ngc6109', 'ngc6251'
 ]
 
 very_extended_targets = ['da240','3c236', '3c31']
+
+difficult_targets = ["4c12.03", "3c212"]
 
 class SelfCalibration(object):
     def __init__(
@@ -95,7 +96,7 @@ class SelfCalibration(object):
             
         logger.info(f'Smoothing {self.data_column} -> SMOOTHED_DATA...')
         self.mss.run(
-            f'/data/scripts/LiLF/scripts/BLsmooth_pol.py {command}', 
+            f'BLsmooth_pol.py {command}', 
             log='$nameMS_smooth1.log', 
             commandType='python'
         )
@@ -103,7 +104,7 @@ class SelfCalibration(object):
         if mode in ["phase", "scalar"]:
             logger.info('Smoothing MODEL_DATA -> SMOOTHED_MODEL_DATA...')
             self.mss.run(
-                f'/data/scripts/LiLF/scripts/BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
+                f'BLsmooth_pol.py -r -s 0.8 -i MODEL_DATA -o SMOOTHED_MODEL_DATA $pathMS', 
                 log='$nameMS_smooth2.log', 
                 commandType='python'
             ) 
@@ -140,7 +141,7 @@ class SelfCalibration(object):
                     msin.datacolumn=SMOOTHED_DATA sol.mode=scalarphase \
                     sol.h5parm=$pathMS/calGph-{self.stats}.h5 \
                     sol.modeldatacolumns=[{model_in}] \
-                    sol.solint={solint} ', # sol.smoothnessconstraint=1e6
+                    sol.solint={solint} sol.smoothnessconstraint=1e6',
                 log=f'$nameMS_solGph-c{self.cycle:02d}.log', 
                 commandType="DP3"
             )
@@ -222,7 +223,7 @@ class SelfCalibration(object):
                 f'{parset_dir}/losoto-plot2d.parset', 
                 f'{parset_dir}/losoto-plot.parset'
             ]
-            if self.stats == "all" and self.phased_up: 
+            if self.stats != "core" and self.phased_up: 
                 try: losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 except: pass
                 
@@ -247,7 +248,7 @@ class SelfCalibration(object):
         elif mode == 'fulljones':
             #if self.stats == "core": smoothcons = '0'
             #else: smoothcons = '0.1e6'
-            if TARGET in extended_targets:
+            if TARGET in extended_targets or TARGET in difficult_targets:
                 smoothcons = '1.e6'
             else:
                 smoothcons = '0.1 e6'
@@ -270,7 +271,7 @@ class SelfCalibration(object):
             ]
             #if self.stats == "core":
             losoto_ops.insert(0, f'{parset_dir}/losoto-ampnorm-diagonal.parset')  
-            if self.stats == "all" and self.phased_up:
+            if self.stats != "core" and self.phased_up:
                 try: losoto_ops.insert(0, f'{parset_dir}/losoto-ref-ph.parset')
                 except: pass
                 
@@ -292,78 +293,6 @@ class SelfCalibration(object):
                 commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
-
-            
-    def solve_tec(self) -> None:
-        logger.info("BL-based smoothing...")
-        self.mss.run(
-            '/net/voorrijn/data2/boxelaar/scripts/LiLF/scripts/BLsmooth.py \
-                -c 8 -n 8 -r -i '+self.data_column+' -o SMOOTHED_DATA $pathMS', 
-            log='$nameMS_smooth-c'+str(self.cycle)+'.log', 
-            commandType='python'
-        )
-        
-        if self.stats == "core":
-            # solve TEC - ms:SMOOTHED_DATA (1m 2SB)
-            logger.info('Solving TEC1...')
-            self.mss.run(
-                'DP3 '+parset_dir+'/DP3-solTEC.parset msin=$pathMS sol.h5parm=$pathMS/tec1.h5 \
-                    sol.antennaconstraint=[[CS002LBA,CS003LBA,CS004LBA,CS005LBA,CS006LBA,CS007LBA]] \
-                    sol.solint='+str(15), # HARDCODED
-                    #+' sol.nchan='+str(8*base_nchan), \
-                log=f'$nameMS_solTEC1-c{self.cycle}.log', 
-                commandType='DP3'
-            )
-
-            lib_util.run_losoto(
-                self.s, 'tec1-c'+str(self.cycle), 
-                [ms+'/tec1.h5' for ms in self.mss.getListStr()], 
-                [parset_dir+'/losoto-plot-tec.parset']
-            )
-            #os.system('mv cal-tec1-c'+str(self.cycle)+'.h5 self/solutions/')
-            #os.system('mv plots-tec1-c'+str(self.cycle)+' self/plots/')
-            
-            # correct TEC - group*_TC.MS:CORRECTED_DATA -> group*_TC.MS:CORRECTED_DATA
-            logger.info('Correcting TEC1...')
-            self.mss.run(
-                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column}\
-                    cor.parmdb=cal-tec1-c{self.cycle}.h5 cor.correction=tec000',
-                log='$nameMS_corTEC1-c'+str(self.cycle)+'.log', 
-                commandType='DP3'
-            )
-        
-          
-        else:
-            # solve TEC - ms:SMOOTHED_DATA (4s, 1SB)
-            logger.info('Solving TEC2...')
-            self.mss.run(
-                'DP3 '+parset_dir+'/DP3-solTEC.parset msin=$pathMS sol.h5parm=$pathMS/tec2.h5 \
-                    sol.solint='+str(15), # HARDCODED
-                    #+' sol.nchan='+str(8*base_nchan), \
-                log=f'$nameMS_solTEC2-c{self.cycle}.log', 
-                commandType='DP3'
-            )
-
-            lib_util.run_losoto(
-                self.s, 'tec2-c'+str(self.cycle), 
-                [ms+'/tec2.h5' for ms in self.mss.getListStr()], 
-                [parset_dir+'/losoto-plot-tec.parset']
-            )
-            #os.system('mv cal-tec2-c'+str(self.cycle)+'.h5 self/solutions/')
-            #os.system('mv plots-tec2-c'+str(self.cycle)+' self/plots/')
-
-            # correct TEC - group*_TC.MS:CORRECTED_DATA -> group*_TC.MS:CORRECTED_DATA
-            logger.info('Correcting TEC2...')
-            self.mss.run(
-                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={self.data_column}\
-                    cor.parmdb=cal-tec2-c{self.cycle}.h5 cor.correction=tec000',
-                log='$nameMS_corTEC2-c'+str(self.cycle)+'.log', 
-                commandType='DP3'
-            )
-        
-            
-        self.data_column = "CORRECTED_DATA"
-         
          
     def apply_mask(self, imagename: str, maskfits: str) -> None:
         beam02Reg, _, region = self.mask
@@ -381,11 +310,11 @@ class SelfCalibration(object):
         else:
             im.makeMask(mode="default", threshpix=threshold, rmsbox=(50,5), atrous_do=True)
         
-        if self.stats == "all" and TARGET in extended_targets:
+        if self.stats != "core" and TARGET in extended_targets:
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
-        elif (region is not None) and (self.stats == "all") and (not self.doamp):
+        elif (region is not None) and (self.stats != "core") and (not self.doamp):
             logger.info("Manual masks used")
             lib_img.blank_image_reg(maskfits, beam02Reg, blankval = 0.)
             lib_img.blank_image_reg(maskfits, region, blankval = 1.)
@@ -399,14 +328,14 @@ class SelfCalibration(object):
         if TARGET in very_extended_targets:
             kwargs1 = {
                 'weight': 'briggs -0.5', 
-                'taper_gaussian': '75arcsec', 
+                'taper_gaussian': '30arcsec', 
                 'multiscale': '', 
                 'multiscale_scale_bias':0.5, 
                 'multiscale_scales':'0,30,60,120,340'
             }
             kwargs2 = {
                 'weight': 'briggs -0.5', 
-                'taper_gaussian': '75arcsec', 
+                'taper_gaussian': '30arcsec', 
                 'multiscale_scale_bias':0.5,
                 'multiscale_scales': '0,30,60,120,340'
             }

@@ -13,8 +13,10 @@ import numpy as np
 import astropy.io.fits as fits
 import casacore.tables as pt
 import lsmtool as lsm
+import pipeline_utils as pipeline
 
-from LiLF import lib_ms, lib_img, lib_util, lib_log
+from LiLF_lib import lib_ms, lib_img, lib_util, lib_log
+from LiLF_lib.lib_ms import AllMSs as MeasurementSets
 #############################################################################
 logger_obj = lib_log.Logger('pipeline-peel.logger')
 logger = lib_log.logger
@@ -31,13 +33,84 @@ sourcedb = parset.get('model','sourcedb')
 fits_model = parset.get('model','fits_model')
 bl2flag = parset.get('flag','stations')
 
+
 # Some script-wide definitions
 uvlambdamin = 30 # why not 100? What is used in ddf-pipeline?
 t_int = 8
 final_chan_per_sb = 2
 pixscale = '1.5arcsec'
 imgsize = 1600
+TARGET = os.getcwd().split('/')[-1]
+data_dir = "/data/data/3Csurvey/tgts/"+TARGET
+sourcedb = f"{data_dir}/{TARGET}.skymodel"
+os.system("cp /data/scripts/LiLF/parsets/LOFAR_3c_core/regions/3c84.reg peel.reg")
 #############################################################################
+
+
+def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
+    cal_dir = pipeline.get_cal_dir(timestamp, logger = logger)
+    
+    using_dir = cal_dir[0]
+    for dir in cal_dir:
+        if TARGET in dir:
+            using_dir = dir
+            logger.info(f"Using cal: {using_dir}")
+        
+    h5_pa = using_dir + '/cal-pa.h5'
+    h5_amp = using_dir + '/cal-amp.h5'
+    h5_iono = using_dir + '/cal-iono.h5'
+    h5_fr = using_dir + '/cal-fr.h5'
+    assert os.path.exists(h5_pa)
+    assert os.path.exists(h5_amp)
+    assert os.path.exists(h5_iono)
+    assert os.path.exists(h5_fr)
+    
+    
+    # Apply cal sol - SB.MS:DATA -> SB.MS:CORRECTED_DATA (polalign corrected)
+    logger.info('Apply solutions (pa)...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA\
+            cor.parmdb={h5_pa} cor.correction=polalign', 
+        log='$nameMS_cor1_pa.log', 
+        commandType='DP3'
+    )
+    
+    # Apply cal sol - SB.MS:CORRECTED_DATA -> SB.MS:CORRECTED_DATA (polalign corrected, calibrator corrected+reweight, beam corrected+reweight)
+    logger.info('Apply solutions (amp)...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS \
+            msin.datacolumn=CORRECTED_DATA cor.parmdb={h5_amp} \
+            cor.correction=amplitudeSmooth cor.updateweights=True', 
+        log='$nameMS_cor1_amp.log', 
+        commandType='DP3'
+    )
+    
+    # Beam correction CORRECTED_DATA -> CORRECTED_DATA (polalign corrected, beam corrected+reweight)
+    logger.info('Beam correction (beam)...')
+    MSs.run(
+        'DP3 '+parset_dir+'/DP3-beam.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
+            msout.datacolumn=CORRECTED_DATA corrbeam.updateweights=True', 
+        log='$nameMS_cor1_beam.log', 
+        commandType='DP3'
+    )
+    
+    # Apply cal sol - SB.MS:CORRECTED_DATA -> SB.MS:CORRECTED_DATA
+    logger.info('Apply solutions (iono)...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA\
+            msout.datacolumn=DATA cor.parmdb={h5_iono} cor.correction=phase000', 
+        log='$nameMS_cor1_iono.log', 
+        commandType='DP3'
+    )
+    '''
+    # Move CORRECTED_DATA -> DATA
+    Logger.info('Move CORRECTED_DATA -> DATA...')
+    MSs.run(
+        'taql "update $pathMS set DATA = CORRECTED_DATA"',
+        log='$nameMS_taql.log', 
+        commandType='general'
+    )
+    #'''
 
 def solve_and_apply(MSs_object, suffix, sol_factor_t=1, sol_factor_f=1, column_in='DATA'):
     """
@@ -53,14 +126,14 @@ def solve_and_apply(MSs_object, suffix, sol_factor_t=1, sol_factor_f=1, column_i
     with w.if_todo(f'solve_iono_{suffix}'):
         logger.info('Solving scalarphase...')
         MSs_object.run(f'DP3 {parset_dir}/DP3-soldd.parset msin=$pathMS msin.datacolumn={column_in} sol.h5parm=$pathMS/iono.h5 '
-                      f'sol.mode=scalarcomplexgain sol.nchan=1 sol.smoothnessconstraint={sol_factor_f * 1e6} sol.solint={sol_factor_t:d} '
-                      f'sol.uvlambdamin={uvlambdamin} sol.usemodelcolumn=True',
+                      f'sol.mode=scalar sol.nchan=1 sol.smoothnessconstraint={sol_factor_f * 1e6} sol.solint={sol_factor_t:d} '
+                      f'sol.uvlambdamin={uvlambdamin}',
                       log=f'$nameMS_sol_iono-{suffix}.log', commandType="DP3")
 
         lib_util.run_losoto(s, f'iono-{suffix}', [ms + '/iono.h5' for ms in MSs_object.getListStr()], \
-                            [   parset_dir + '/losoto-flag.parset',
-                                parset_dir + '/losoto-plot-scalaramp.parset',
-                                parset_dir + '/losoto-plot-scalarph.parset'])
+                            [   f'{parset_dir}/losoto-clip-large.parset', 
+                f'{parset_dir}/losoto-plot2d.parset', 
+                f'{parset_dir}/losoto-plot.parset'])
 
         move(f'cal-iono-{suffix}.h5', 'peel/solutions/')
         move(f'plots-iono-{suffix}', 'peel/plots/')
@@ -78,11 +151,16 @@ def solve_and_apply(MSs_object, suffix, sol_factor_t=1, sol_factor_f=1, column_i
         MSs_object.run(f'DP3 {parset_dir}/DP3-soldd.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA2 '
                       f'sol.h5parm=$pathMS/fulljones.h5 sol.mode=fulljones sol.nchan=1 sol.solint={sol_factor_t * 128 // t_int:d} '
                       f'sol.smoothnessconstraint={sol_factor_f * 2.0e6} sol.uvlambdamin={uvlambdamin} '
-                      f'sol.usemodelcolumn=True', log=f'$nameMS_sol_fulljones-{suffix}.log',
+                      , log=f'$nameMS_sol_fulljones-{suffix}.log',
                       commandType="DP3")
 
         lib_util.run_losoto(s, f'fulljones-{suffix}', [ms + '/fulljones.h5' for ms in MSs_object.getListStr()], \
-                            [  parset_dir + '/losoto-plot-fulljones.parset'])
+                            [
+                parset_dir+'/losoto-clip.parset', 
+                parset_dir+'/losoto-plot2d.parset', 
+                parset_dir+'/losoto-plot2d-pol.parset', 
+                parset_dir+'/losoto-plot-pol.parset'
+            ])
         move(f'cal-fulljones-{suffix}.h5', 'peel/solutions/')
         move(f'plots-fulljones-{suffix}', 'peel/plots/')
 
@@ -240,10 +318,10 @@ with w.if_todo('cleaning'):
     os.makedirs('peel/masks')
 ### DONE
 
-MSs = lib_ms.AllMSs( glob.glob(data_dir + '/*.MS'), s, check_flags=False)
+MSs = lib_ms.AllMSs( glob.glob(data_dir + '/*.MS-bkp'), s, check_flags=False)
 if not MSs.isHBA:
     logger.error('Only HBA measurement sets supported for now.')
-    sys.exit(1)
+    #sys.exit(1)
 try:
     MSs.print_HAcov()
 except:
@@ -269,90 +347,15 @@ elif sourcedb != '':
 else:
     raise ValueError('Please provide either fits_model or sourcedb in the lilf.config [model] section.')
 
+model_centre = np.array([49.9508526, 41.5136269])
 pointing_distance = lib_util.distanceOnSphere(*model_centre, *phasecentre)
 logger.info(f"Distance between model and MS phase centre: {pointing_distance:.5f}deg")
+
 ##################################################
 with w.if_todo('apply'):
-    # Find solutions to apply
-    cal_dirs = glob.glob(cal_dir + 'id*_-_3[c|C]196') + glob.glob(cal_dir + 'id*_-_3[c|C]295')
-    if len(cal_dirs) == 0:
-        logger.error(f'No calibrators found in cal dir: {cal_dir}')
-        sys.exit(1)
+    # get MS ready for peeling. e.g. bkp MS
+    pass
 
-    cal_times = []  # mean times of the cal
-    for cal in cal_dirs:
-        cal_ms = lib_ms.MS(glob.glob(f'{cal}/*.MS')[0]) # assume all MS are equal
-        assert cal_ms.isCalibrator()
-        cal_times.append(np.mean(cal_ms.getTimeRange()))
-    obs_time = np.mean(MSs.getListObj()[0].getTimeRange())
-    delta_t = np.abs(obs_time - np.array(cal_times))
-    cal_id = np.argmin(delta_t)
-    cal_dir =  cal_dirs[cal_id]
-    if delta_t[cal_id] < 5*3600:
-        logger.info(f'Found calibrator dir {cal_dirs[cal_id]} which is {delta_t[cal_id]/3600:.2f}h from mean observation time.')
-    else:
-        logger.error(f'Found calibrator dir {cal_dirs[cal_id]} which is {delta_t[cal_id]/3600:.2f}h from mean observation time!')
-
-    logger.info('Calibrator directory: %s' % cal_dir)
-    h5_pa = cal_dir + '/cal-pa.h5'
-    h5_amp = cal_dir + '/cal-amp.h5'
-    h5_iono = cal_dir + '/cal-iono.h5'
-    if not os.path.exists(h5_pa) or not os.path.exists(h5_amp) or not os.path.exists(h5_iono):
-        logger.error("Missing solutions in %s" % cal_dir)
-        sys.exit()
-
-    # Apply cal sol - SB.MS:DATA -> SB.MS:CORRECTED_DATA (polalign corrected)
-    logger.info('Apply solutions (pa)...')
-    MSs.run(f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA msout.datacolumn=CORRECTED_DATA '
-            f'msout.storagemanager=dysco cor.parmdb={h5_pa} cor.correction=polalign',
-            log='$nameMS_cor1.log', commandType='DP3')
-
-    # Apply cal sol - SB.MS:CORRECTED_DATA -> SB.MS:CORRECTED_DATA (polalign corrected, calibrator corrected+reweight, beam corrected+reweight)
-    logger.info('Apply solutions (amp/ph)...')
-    MSs.run(f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA '
-            f'msout.datacolumn=CORRECTED_DATA msout.storagemanager=dysco '
-            f'cor.steps=[amp,clock] cor.amp.parmdb={h5_amp} cor.amp.correction=amplitudeSmooth '
-            f'cor.amp.updateweights=True cor.clock.parmdb={h5_iono} cor.clock.correction=clockMed000',
-            log='$nameMS_cor2.log', commandType='DP3')
-
-    # Beam correction CORRECTED_DATA -> CORRECTED_DATA (polalign corrected, beam corrected+reweight)
-    logger.info('Beam correction...')
-    MSs.run(f'DP3 {parset_dir}/DP3-beam.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA '
-            f'msout.datacolumn=CORRECTED_DATA  msout.storagemanager=dysco '
-            f'corrbeam.updateweights=True', log='$nameMS_beam.log',
-            commandType='DP3')
-### DONE
-
-###################################################
-
-with w.if_todo('clip_ateam'):
-    logger.info('Clip A-Team: predict...')
-    clip_model = os.path.dirname(__file__) + '/../models/A-Team_lowres.skydb'
-    MSs.run(f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA '
-            f'pre.sourcedb={clip_model} pre.sources=[TauA,CasA,CygA]',
-            log='$nameMS_pre_clipAteam.log', commandType='DP3')
-
-    logger.info('Clip A-Team: flagging...')
-    MSs.run('Ateamclipper.py $pathMS', log='$nameMS_ateamclipper.log', commandType='python')
-
-    MSs.run('plot_Ateamclipper.py logs/Ateamclipper.txt peel/plots/Ateamclipper.png', log='$nameMS_ateamclipper.log', commandType='python')
-
-# Initial flagging
-with w.if_todo('flag'):
-    logger.info('Flagging...')
-    MSs.run(f'DP3 {parset_dir}/DP3-flag.parset msin=$pathMS ant.baseline=\"{bl2flag}\" msin.datacolumn=CORRECTED_DATA '
-            f'aoflagger.strategy={parset_dir}/HBAdefaultwideband.lua uvmin.uvlambdamin={uvlambdamin}',
-            log='$nameMS_flag.log', commandType='DP3')
-    logger.info('Remove bad timestamps...')
-    MSs.run('flagonmindata.py -f 0.5 $pathMS', log='$nameMS_flagonmindata.log', commandType='python')
-
-    # need to make this work for more than one MS!
-    # logger.info('Plot weights...')
-    # MSs.run(f'reweight.py $pathMS -v -p -a "CS001HBA0"',
-    #         log='$nameMS_weights.log', commandType='python')
-    # os.system('move *.png self/plots')
-### DONE
-# Also cut frequencies above 168 MHz such that the number of channels is multiple of 4
 with pt.table(MSs.getListObj()[0].pathMS + "/OBSERVATION") as tab:
     field = tab[0]["LOFAR_TARGET"][0]
 
@@ -370,7 +373,8 @@ if 1/3600 < pointing_distance: # CASE 1 -> model and MS not aligned, peel
         lib_util.check_rm('mss-shift')
         os.makedirs('mss-shift')
         logger.info(f'Phase shifting @{timeint_init}s, using {nchan} channels (from {nchan_init})')
-
+        
+        logger.info(f'Shifting to model centre: {model_centre[0]:.5f}deg, {model_centre[1]:.5f}deg...')
         for MS in MSs.getListObj():
             nchan_thisms = int(np.sum(np.array(MS.getFreqs()) < 168.3e6))  # only use 120-168 MHz
             if nchan_thisms == 0:
@@ -382,7 +386,7 @@ if 1/3600 < pointing_distance: # CASE 1 -> model and MS not aligned, peel
             logCurrent = MS.concretiseString('$nameMS_initshift.log')
             s.add(cmd=commandCurrent, log=logCurrent, commandType='DP3', )
         s.run(check=True)
-    MSs_shift = lib_ms.AllMSs( glob.glob('mss-shift/*.MS'), s, check_flags=False )
+    MSs_shift = lib_ms.AllMSs( sorted(glob.glob('mss-shift/*.MS')), s, check_flags=False )
 
     with w.if_todo('apply_beam'):
         logger.info('Correcting beam: DATA -> DATA...')
@@ -395,9 +399,10 @@ if 1/3600 < pointing_distance: # CASE 1 -> model and MS not aligned, peel
         t_avg_factor = round(16/timeint)
         nchan_shift = len(MSs_shift.getFreqs())
         nchan_shiftavg = len(MSs_shift.getListObj()) / 2 # 0.5 chan/SB
-        f_avg_factor = round(nchan_shift/nchan_shiftavg)
+        f_avg_factor = 8 #round(nchan_shift/nchan_shiftavg)
         lib_util.check_rm('mss-shiftavg')
         os.makedirs('mss-shiftavg')
+        logger.info(f"t: {t_avg_factor}, f: {f_avg_factor}")
         # Average all MSs to one single MS (so that we can average to less than 1 chan/SB)
         logger.info(f'Averaging {timeint:.2f}s -> {t_avg_factor*timeint:.2f}s; {nchan_shift}chan -> {nchan_shiftavg}chan')
         s.add(f'DP3 {parset_dir}/DP3-avg.parset msin=[{",".join(MSs_shift.getListStr())}] msin.datacolumn=DATA '
@@ -411,7 +416,9 @@ if 1/3600 < pointing_distance: # CASE 1 -> model and MS not aligned, peel
         predict_fits_model(MSs_shiftavg, fits_model)
     else:
         predict_sourcedb_model(MSs_shiftavg)
+        
     #####################################################################################################
+    
     # Get mask -> required to blank model for DI calibration later on
     if not os.path.exists(peelMask):
         logger.info('Create mask...')
@@ -422,13 +429,17 @@ if 1/3600 < pointing_distance: # CASE 1 -> model and MS not aligned, peel
         copy2(f'img/mask-dirty.fits', f'{peelMask}')
         lib_img.blank_image_reg(peelMask, peelReg.filename, inverse=True, blankval=0.)
         lib_img.blank_image_reg(peelMask, peelReg.filename, inverse=False, blankval=1.)
+        
     ##################################################################################
+    
     # solve+apply scalarphase and fulljones
     solve_and_apply(MSs_shiftavg, field, sol_factor_f=sol_factor_f)
     # do_testimage(MSs_shiftavg)
     # corrupt and subtract with above solutions
     # corrupt_subtract_testimage(MSs_shiftavg, field) # testing...
+    
     ##################################################################################
+    
     # Predict model to MSs_shift
     if fits_model != '':
         predict_fits_model(MSs_shift, fits_model, stepname='predict_fnal', predict_reg=predictReg)
@@ -477,6 +488,7 @@ if 1/3600 < pointing_distance: # CASE 1 -> model and MS not aligned, peel
 #                 f'demixer.subtractsources=\[{",".join(demix_patches)}\]',
 #                 log='$nameMS_demix.log', commandType='DP3')
 #     MSs_subtracted = MSs
+#
 #### CASE 2: Model and MS are aligned. Solve
 else:
     if fits_model != '':

@@ -110,8 +110,8 @@ def solve_fr_from_circphasediff(phaseup=True, pre=False):
                             log='$nameMS_solFR.log', commandType="DP3")
 
     h5name = 'prefr' if pre else 'fr'
-    lib_util.run_losoto(s, h5name, [ms + '/fr.h5' for ms in MSs_fr.getListStr()],
-                        [parset_dir + '/losoto-ref-ph.parset', parset_dir + '/losoto-fr.parset'])
+    losoto_parsets = [parset_dir + '/losoto-ref-ph.parset', parset_dir + '/losoto-fr-phaseup.parset'] if phaseup else [parset_dir + '/losoto-fr.parset']
+    lib_util.run_losoto(s, h5name, [ms + '/fr.h5' for ms in MSs_fr.getListStr()], losoto_parsets)
     lib_util.check_rm('concat_fr.MS')
 
 #############################################################
@@ -390,12 +390,16 @@ with w.if_todo('cal_iono'):
                            sol.solint=1 sol.nchan=1 sol.smoothnessconstraint=0.1e6 sol.smoothnessreffrequency=54e6', \
                            log='$nameMS_solIONO.log', commandType="DP3")
    
-    if (min(MSs_concat_phaseupIONO.getFreqs()) < 35.e6) or MSs.hasIS:
+    if expect_strong_iono:
         lib_util.run_losoto(s, 'iono', [ms + '/iono.h5' for ms in MSs_concat_phaseupIONO.getListStr()],
-                            [parset_dir + '/losoto-ref-ph.parset', parset_dir + '/losoto-plot-scalarph.parset', parset_dir + '/losoto-iono3rd.parset'])
+                            [parset_dir + '/losoto-ref-ph.parset', 
+                             parset_dir + '/losoto-plot-scalarph.parset', 
+                             parset_dir + '/losoto-iono3rd.parset'])
     else:
         lib_util.run_losoto(s, 'iono', [ms + '/iono.h5' for ms in MSs_concat_phaseupIONO.getListStr()],
-                            [parset_dir + '/losoto-ref-ph.parset', parset_dir + '/losoto-plot-scalarph.parset', parset_dir + '/losoto-iono.parset'])
+                            [parset_dir + '/losoto-ref-ph.parset', 
+                             parset_dir + '/losoto-plot-scalarph.parset', 
+                             parset_dir + '/losoto-iono.parset'])
 ### DONE
 
 ######################################################

@@ -161,9 +161,9 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     gc.add_beam(color="none", edgecolor=annotation_color)
     gc.add_label(0.495, 0.94, source.name, relative=True, size=25, color=annotation_color)
     
-    #gc.add_colorbar()
-    #gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
-    #gc.colorbar.set_axis_label_font(size=fontsize)
+    gc.add_colorbar()
+    gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
+    gc.colorbar.set_axis_label_font(size=fontsize)
     #gc.colorbar.set_font(size=fontsize)
     axes = aplpy.AxisLabels(gc)
     axes.hide()
@@ -181,10 +181,9 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
 
     gc.tick_labels.set_font(size=fontsize)
     gc.axis_labels.set_font(size=fontsize)
-    try:
-        gc.save(f"plots/{source.name}{suffix}.png", dpi=300)
-    except:
-        gc.save(f"plots/{source.name}{suffix}.png", dpi=150)
+    if not os.path.exists("plots/"):
+        os.mkdir("plots/")
+    gc.save(f"plots/{source.name}{suffix}.pdf")
     
     os.remove('test.fits')
     plt.clf()
@@ -194,7 +193,7 @@ if __name__ == "__main__":
     
     
     all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}/*"))]
-    catalog = asis.Catalogue3C(all_targets)
+    catalog = asis.Catalogue3C(all_targets, use_cache=False)
     
     for source in catalog:
         if source.name in ["3c296"]:
@@ -202,21 +201,23 @@ if __name__ == "__main__":
         
         paths = sorted(glob.glob(f"{DATA_DIR}/{source.name}/img/img-all-*-MFS-image.fits"))
         if len(paths) <= 1:
-            print(f"Failed to plot {source.name}")
-            continue
+            paths = sorted(glob.glob(f"/home/local/work/j.boxelaar/data/3Csurvey/tgts/{source.name}/img/img-all-*-MFS-image.fits"))
+            if len(paths) <= 1:
+                print(f"Failed to plot {source.name}")
+                continue
         
         path = paths[-2]
-        #path = f"{DATA_DIR}{source.name}/img/{source.name}-img-final-MFS-image.fits"
         if os.path.exists(path):
             source.set_data(path) 
         else:
-            print(f"Failed to plot {source.name}")
+            print(f"Failed to plot {source.name}. path does not exist")
             continue
         
-        if source.name in extended_targets:
-            size = 800
-        elif source.name in very_extended_targets:
+        
+        if source.name in very_extended_targets or source.name in ["3c274", "3c236"]:
             size = int(source.data.shape[0]//2)
+        elif source.name in extended_targets:
+            size = 800
         else:
             size=300
             
