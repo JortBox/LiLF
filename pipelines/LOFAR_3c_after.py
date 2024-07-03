@@ -390,8 +390,7 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         check_flags=False, 
         check_sun=True
     )
-    return MSs          
-    
+    return MSs
     
 def demix(MSs: MeasurementSets):
     for ateam in ['VirA', 'TauA', 'CygA', 'CasA']:
@@ -493,237 +492,67 @@ def clean_specific(mode: str) -> None :
 
     
 def main(args: argparse.Namespace) -> None:
-    stopping=False
-    for stations in args.stations:
-        setup()
-        
-        try:
-            MSs = MeasurementSets(
-                sorted(glob.glob(f'*concat_{stations}.MS')), 
-                SCHEDULE, 
-                check_flags=False
-            )   
-        except:
-            pass
-
-        if stations != "core": 
-            with WALKER.if_todo('phaseupCS ' + stations):
-                MSs = phaseup(MSs, stations, do_test=args.do_test)
-            
-            MSs = MeasurementSets(
-                glob.glob(f'*concat_{stations}.MS-phaseup'), 
-                SCHEDULE, 
-                check_flags=False, 
-                check_sun=True
-            )
-            
-        with WALKER.if_todo(f"clean_{stations}"):
-            clean_specific(stations)  
-            
-        # make beam region files
-        masking = pipeline.make_beam_region(MSs, TARGET)
-        
-        # Predict model    
-        with WALKER.if_todo('predict_' + stations):  
-            predict(MSs, doBLsmooth=False)
-        
-        rms_noise_pre = np.inf
-        mm_ratio_pre = 0
-        
-        if stations == "core":
-            if args.total_cycles_core is None:
-                total_cycles = 5
-            else:
-                total_cycles = args.total_cycles_core
-            
-        elif stations == "all":
-            if args.total_cycles_all is None:
-                total_cycles = 20
-            else:
-                total_cycles = args.total_cycles_all
-        else:
-            total_cycles = 10
-
-        calibration = pipeline.SelfCalibration(
-            MSs, 
-            schedule=SCHEDULE, 
-            total_cycles=total_cycles, 
-            mask=masking, 
-            stats=stations,
-            target=TARGET
-        )
-        if args.no_phaseup:
-            calibration.phased_up = False
-        else:
-            calibration.phased_up = True 
-        
-        for cycle in calibration:
-            #calibration.empty_clean(f"img/img-empty-c{cycle}")
-            
-            with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
-                
-                if stations == "core":
-                    if cycle == 1 or args.do_core_scalar_solve:
-                        calibration.solve_gain('phase') 
-                    
-                    if not args.scalar_only and cycle > 0:
-                        calibration.solve_gain(
-                            "fulljones", 
-                            bl_smooth_fj=args.bl_smooth_fj, 
-                            smooth_all_pols=args.smooth_all_pols
-                        )
-                        
-                        #calibration.solve_gain('amplitude')
-                        
-                    
-                else:
-                    if cycle > 15 and not calibration.doamp:
-                        calibration.doamp = True
-                        Logger.info("Amplitude solve activated")
-                           
-                    if calibration.doph:
-                        calibration.solve_gain('scalar')
-                    
-                    if calibration.doamp and not args.scalar_only and cycle > 1:
-                        if args.no_fulljones:
-                            Logger.info("No fulljones, scalar amplitude solve")
-                            calibration.solve_gain("amplitude")
-                        else:
-                            calibration.solve_gain(
-                                'fulljones', 
-                                bl_smooth_fj=args.bl_smooth_fj, 
-                                smooth_all_pols=args.smooth_all_pols
-                            )
-                            # Do extra amp solve to do the ampnorm afterwards 
-                            
-
-            with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
-                #calibration.empty_clean(f"img/img-empty-c{cycle}")
-                
-                imagename = f'img/img-{stations}-{cycle:02d}'
-                try:
-                    calibration.clean(imagename, apply_beam=args.apply_beam)
-                    rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
-                except RuntimeError:
-                    Logger.error(f"Failed to clean {imagename}")
-                    rms_noise_pre, mm_ratio_pre, stopping = np.inf, 0, True
-                    calibration.rms_history.append(rms_noise_pre)
-                    calibration.ratio_history.append(mm_ratio_pre)
-                    break
-                
-            if stopping or cycle == calibration.stop:
-            #    Logger.info("Start Peeling")                
-            #    #pipeline.peel(peel_mss, calibration.s)
-                break
-            
-        with WALKER.if_todo(f"save_{stations}_history"):
-            np.savetxt(
-                f'rms_noise_history_{stations}.csv', 
-                np.asarray(calibration.rms_history), 
-                delimiter=",", 
-                header="rms noise after every calibration cycle (Jy/beam)"
-            )
-            np.savetxt(
-                f'mm_ratio_noise_history_{stations}.csv', 
-                np.asarray(calibration.ratio_history), 
-                delimiter=",", 
-                header="mm ratio  after every calibration cycle"
-            )
-            
-            if stations == "all":
-                pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET) 
-            
-                Logger.info(f"Saving model to {TARGET}.skymodel")
-                os.system(f"python /data/scripts/revoltek-scripts/fits2sky.py \
-                    img/{TARGET}-img-final-MFS {TARGET}.skymodel --ref_freq 57.7e6 \
-                    --fits_mask img/img-all-01-mask.fits --min_peak_flux_jy 0.005"
-                )
-            
-        if stations == "all":
-            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-            calibration.low_resolution_clean("img/img-low")   
-        
-        
+    setup()
+    stations = "all"
     
-    
-    # copy the calibrated measurementsets into final file 
-    try:
-        MSs.run(
-            f"DP3 {parset_dir}/DP3-avg.parset msin=$pathMS \
-                msin.datacolumn=CORRECTED_DATA msout=$pathMS-final \
-                msout.datacolumn=DATA",       
-            log=f'$nameMS_final.log', 
-            commandType="DP3"
-        )
-    except:
-        pass
-                          
-    Logger.info("Done.")
-    
-def do_peel():
     MSs = MeasurementSets(
-        glob.glob(f'*concat_all.MS-phaseup'), 
+        sorted(glob.glob(f'*concat_{stations}.MS')), 
+        SCHEDULE, 
+        check_flags=False
+    ) 
+    
+    with WALKER.if_todo('phaseupCS'):
+        MSs = phaseup(MSs, stations, do_test=args.do_test)
+    
+    MSs = MeasurementSets(
+        glob.glob(f'*concat_{stations}.MS-phaseup'), 
         SCHEDULE, 
         check_flags=False, 
         check_sun=True
-        )
-    
-    pipeline.peel(MSs, SCHEDULE)
-    
-    peel_mss = MeasurementSets(
-        glob.glob(f'*.MS*peel'), 
-        SCHEDULE, 
-        check_flags=False, 
-        check_sun=True
-    )    
-    
-    with WALKER.if_todo('clean-after-peel'):
-        peel_mss.run(
-            'taql "update $pathMS set CORRECTED_DATA = DATA"',
-            log="$nameMS_taql.log",
-            commandType="general",
-        )
-        
-        mask = pipeline.make_beam_region(MSs, TARGET)
-        cal = pipeline.SelfCalibration(peel_mss, schedule=SCHEDULE, total_cycles=2, mask=mask)
-        cal.clean(f'img/img-after-peeling')
-        
-def test_clean():
-    MSs = MeasurementSets(glob.glob(f'*concat_all.MS-phaseup'), SCHEDULE)
-    
-    masking = pipeline.make_beam_region(MSs, TARGET)
-    calibration = pipeline.SelfCalibration(
-        MSs, schedule=SCHEDULE, mask=masking, stats="all"
     )
     
-    Logger.info('Correcting CS...')
-    fulljones_solution = sorted(glob.glob("cal-Ga*all-ampnorm.h5"))
-    solution = sorted(glob.glob("cal-Gp*all-ampnorm.h5"))
+    # make beam region files
+    masking = pipeline.make_beam_region(MSs, TARGET)
     
-    if len(solution) != 0:
-        Logger.info(f"correction Gain-scalar of {solution[-1]}")
-        # correcting DATA -> CORRECTED_DATA
-        calibration.mss.run(
-            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
-                cor.parmdb={solution[-1]} cor.correction=phase000',
-            log='$nameMS_corPH-all.log', 
-            commandType='DP3'
+    # Predict model    
+    with WALKER.if_todo('predict_' + stations):  
+        predict(MSs, doBLsmooth=False)
+    
+    calibration = pipeline.SelfCalibration(
+        MSs, 
+        schedule=SCHEDULE,
+        mask=masking,
+        stats=stations,
+        target=TARGET
+    )
+    
+    if args.no_phaseup:
+        calibration.phased_up = False
+    else:
+        calibration.phased_up = True 
+        
+    solutions_ph = sorted(glob.glob(f'cal-Gp*all-ampnorm.h5'))[-2]
+    solutions_fj = sorted(glob.glob(f'cal-Ga*all-ampnorm.h5'))[-2]
+            
+    calibration.correct(solutions_ph)
+    calibration.correct(solutions_fj, column_in="CORRECTED_DATA")
+    
+    with WALKER.if_todo(f"image-final" ):
+        imagename = f'img/img-{TARGET}-final'
+        try:
+            calibration.clean(imagename, apply_beam=True)
+        except RuntimeError:
+            Logger.error(f"Failed to clean {imagename}")
+            sys.exit()
+        
+    with WALKER.if_todo(f"save_skymodel"):    
+        Logger.info(f"Saving model to {TARGET}.skymodel")
+        os.system(f"python /data/scripts/revoltek-scripts/fits2sky.py \
+            img/{TARGET}-img-final-MFS {TARGET}.skymodel --ref_freq 57.7e6 \
+            --fits_mask img/img-all-01-mask.fits --min_peak_flux_jy 0.005"
         )
-    
-    if len(fulljones_solution) != 0:
-        Logger.info(f"Correction Gain of {fulljones_solution[-1]}")
-        # correcting CORRECTED_DATA -> CORRECTED_DATA
-        calibration.mss.run(
-            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=CORRECTED_DATA \
-                cor.parmdb={fulljones_solution[-1]} cor.correction=fulljones \
-                cor.soltab=[amplitude000,phase000]',
-            log='$nameMS_corAMPPHslow-all.log', 
-            commandType='DP3'
-        )
-    
-    imagename = f'img/img-clean-test'
-    calibration.clean(imagename)
-    calibration.prepare_next_iter(imagename, 0, 0)
+                          
+    Logger.info("Done.")
 
 
 if __name__ == "__main__":
@@ -733,10 +562,10 @@ if __name__ == "__main__":
     
     os.chdir(DATA_DIR)
     
-    Logger_obj = lib_log.Logger('pipeline-3c.logger')
+    Logger_obj = lib_log.Logger('pipeline-3c-after.logger')
     Logger = lib_log.logger
     SCHEDULE = lilf.Scheduler(log_dir=Logger_obj.log_dir, dry=False)
-    WALKER = lilf.Walker('pipeline-3c.walker')
+    WALKER = lilf.Walker('pipeline-3c-after.walker')
 
     # parse parset
     parset = lilf.getParset()

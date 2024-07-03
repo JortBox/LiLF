@@ -1,5 +1,6 @@
-import os, sys, re, time, pickle, random, shutil, glob
+import os, sys, glob
 import socket
+import datetime
 
 from casacore import tables
 import numpy as np
@@ -7,6 +8,7 @@ import multiprocessing, subprocess
 from threading import Thread
 from queue import Queue
 import pyregion
+from astropy.io import fits
 import gc
 
 if (sys.version_info > (3, 0)):
@@ -18,6 +20,7 @@ else:
 import matplotlib as mpl
 mpl.use("Agg")
 
+from LiLF_lib import lib_img
 from LiLF_lib.lib_log import logger
 
 def getParset(parsetFile=''):
@@ -56,37 +59,42 @@ def getParset(parsetFile=''):
     # preprocess
     add_default('LOFAR_preprocess', 'fix_table', 'True') # fix bug in some old observations
     add_default('LOFAR_preprocess', 'renameavg', 'True')
-    add_default('LOFAR_preprocess', 'flag_elev', 'True')
-    add_default('LOFAR_preprocess', 'keep_IS', 'True')
+    add_default('LOFAR_preprocess', 'keep_IS', 'False')
     add_default('LOFAR_preprocess', 'backup_full_res', 'False')
+    add_default('LOFAR_preprocess', 'demix_sources', '')  # Demix  sources in these patches (e.g. [VirA,TauA], default: No demix
+    add_default('LOFAR_preprocess', 'demix_skymodel', '')  # Use non-default demix skymodel.
+    add_default('LOFAR_preprocess', 'demix_field_skymodel', 'gsm')  # Provide a custom target skymodel instead of online gsm model. Set to '' to ignore target.
     # demix
     add_default('LOFAR_demix', 'data_dir', 'data-bkp/')
     add_default('LOFAR_demix', 'include_target', 'False')
-    add_default('LOFAR_demix', 'demix_model', os.path.dirname(__file__)+'/../models/demix_all.skydb')
+    add_default('LOFAR_demix', 'demix_model', os.path.dirname(__file__)+'/../models/demix_all.skydb')    
     # cal
     add_default('LOFAR_cal', 'data_dir', 'data-bkp/')
-    add_default('LOFAR_cal', 'copy_dir', 'data-copy/')
-  
     add_default('LOFAR_cal', 'skymodel', '') # by default use calib-simple.skydb for LBA and calib-hba.skydb for HBA
     add_default('LOFAR_cal', 'imaging', 'False')
+    add_default('LOFAR_cal', 'copy_dir', 'data-copy/')
     add_default('LOFAR_cal', 'fillmissingedges', 'True')
     add_default('LOFAR_cal', 'sparse_sb', 'False') # change flagging so that we can handle data with alternating SBs only
     # timesplit
     add_default('LOFAR_timesplit', 'data_dir', 'data-bkp/')
-    add_default('LOFAR_timesplit', 'copy_dir', './data-copy-timesplit/')
-    add_default('LOFAR_timesplit', 'cal_dir', 'solutions/') # by default the repository is tested, otherwise ../obsid_3[c|C]*
+    add_default('LOFAR_timesplit', 'cal_dir', '') # by default the repository is tested, otherwise ../obsid_3[c|C]*
     add_default('LOFAR_timesplit', 'ngroups', '1')
     add_default('LOFAR_timesplit', 'initc', '0')
-    # quick-self
-    add_default('LOFAR_quick-self', 'data_dir', 'data-bkp/')
-    # dd-parallel - deprecated
-    #add_default('LOFAR_dd-parallel', 'maxniter', '10')
-    #add_default('LOFAR_dd-parallel', 'calFlux', '1.5')
+    add_default('LOFAR_timesplit', 'bp_fulljones', 'False') # TEST: whether to transfer time-dependent fulljones solutions from the calibrator
+    add_default('LOFAR_timesplit', 'no_aoflagger', 'False') # TEST: Skip aoflagger (e.g. for observations of A-Team sources)
+    # self
+    add_default('LOFAR_self', 'maxIter', '2')
+    add_default('LOFAR_self', 'subfield', '') # possible to provide a ds9 box region customized sub-field. DEfault='' -> Automated detection using subfield_min_flux.
+    add_default('LOFAR_self', 'subfield_min_flux', '40') # min flux within calibration subfield
+    add_default('LOFAR_self', 'ph_sol_mode', 'tecandphase') # phase or tecandphase
     # dd
     add_default('LOFAR_dd', 'maxIter', '2')
-    add_default('LOFAR_dd', 'minCalFlux60', '1')
-    add_default('LOFAR_dd', 'removeExtendedCutoff', '0.0005')
+    add_default('LOFAR_dd', 'minCalFlux60', '1.')
+    add_default('LOFAR_dd', 'solve_amp', 'True') # to disable amp sols
+    # add_default('LOFAR_dd', 'removeExtendedCutoff', '0.0005')
     add_default('LOFAR_dd', 'target_dir', '') # ra,dec
+    add_default('LOFAR_dd', 'manual_dd_cal', '')
+    # add_default('LOFAR_dd', 'solve_tec', 'False') # per default, solve each dd for scalarphase. if solve_tec==True, solve for TEC instead.
     # extract
     add_default('LOFAR_extract', 'max_niter', '10')
     add_default('LOFAR_extract', 'subtract_region', '') # Sources inside extract-reg that should still be subtracted! Use this e.g. for individual problematic sources in a large extractReg
@@ -108,10 +116,10 @@ def getParset(parsetFile=''):
     add_default('LOFAR_m87', 'skipmodel', 'False')
     add_default('LOFAR_m87', 'model_dir', '')
     # peel
-    add_default('LOFAR_peel', 'peelReg', 'peel.reg')
-    add_default('LOFAR_peel', 'predictReg', '')
-    add_default('LOFAR_peel', 'cal_dir', '')
-    add_default('LOFAR_peel', 'data_dir', './')
+    #add_default('LOFAR_peel', 'peelReg', 'peel.reg')
+    #add_default('LOFAR_peel', 'predictReg', '')
+    #add_default('LOFAR_peel', 'cal_dir', '')
+    #add_default('LOFAR_peel', 'data_dir', './')
 
     ### uGMRT ###
     # init - deprecated
@@ -133,13 +141,14 @@ def getParset(parsetFile=''):
 
     return config
 
-def create_extregion(ra, dec, extent):
+def create_extregion(ra, dec, extent, color='yellow'):
     """
     Parameters
     ----------
     ra
     dec
     extent
+    color
 
     Returns
     -------
@@ -148,7 +157,7 @@ def create_extregion(ra, dec, extent):
 
     regtext = ['# Region file format: DS9 version 4.1']
     regtext.append(
-        'global color=yellow dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1')
+        f'global color={color} dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1')
     regtext.append('fk5')
     regtext.append('circle(' + str(ra) + ',' + str(dec) + f',{extent})')
     nline = '\n'
@@ -327,7 +336,7 @@ def run_losoto(s, c, h5s, parsets, plots_dir=None) -> object:
     # concat/move
     if len(h5s) > 1:
         check_rm(h5out)
-        s.add('H5parm_collector.py -V -s sol000 -o '+h5out+' '+' '.join(h5s), log='losoto-collector-'+c+'.log', commandType="python", processors='max')
+        s.add('H5parm_collector.py -V -s sol000 -o '+h5out+' '+' '.join(h5s), log='losoto-'+c+'.log', commandType="python", processors='max')
         s.run(check = True)
     else:
         os.system('cp -r %s %s' % (h5s[0], h5out) )
@@ -349,15 +358,51 @@ def run_losoto(s, c, h5s, parsets, plots_dir=None) -> object:
         check_rm('plots')
 
 
-def run_wsclean(s, logfile, MSs_files, do_predict=False, **kwargs):
+def run_wsclean(s, logfile, MSs_files, do_predict=False, concat_mss=False, keep_concat=False, **kwargs):
     """
     s : scheduler
+    concat_mss : try to concatenate mss files to speed up wsclean
     args : parameters for wsclean, "_" are replaced with "-", any parms=None is ignored.
            To pass a parameter with no values use e.g. " no_update_model_required='' "
     """
-    
+
+    # Check whether we can combine MS files in time, if some (or all) of them have the same antennas.
+    # This speeds up WSClean significantly.
+    if concat_mss:
+        if not 'cont' in kwargs.keys():
+            from LiLF import lib_ms
+            from itertools import groupby
+
+            keyfunct = lambda x: ' '.join(sorted(lib_ms.MS(x).getAntennas()))
+            MSs_list = sorted(MSs_files.split(), key=keyfunct) # needs to be sorted
+            groups = []
+            for k, g in groupby(MSs_list, keyfunct):
+                g = list(g)
+                # reorder in time to prevent wsclean bug
+                times = [lib_ms.MS(MS).getTimeRange()[0] for MS in g]
+                g = [MS for _, MS in sorted(zip(times, g))]
+                groups.append(g)
+            logger.info(f"Found {len(groups)} groups of datasets with same antennas.")
+            for i, group in enumerate(groups, start=1):
+                antennas = ', '.join(lib_ms.MS(group[0]).getAntennas())
+                logger.info(f"WSClean MS group {i}: {group}")
+                logger.debug(f"List of antennas: {antennas}")
+
+            MSs_files_clean = []
+            for g, group in enumerate(groups):
+                s.add(f'taql select from {group} giving wsclean_concat_{g}.MS as plain', log=logfile, commandType='general')
+                s.run(check=True)
+                MSs_files_clean.append(f'wsclean_concat_{g}.MS')
+        else:
+            # continue clean
+            MSs_files_clean = glob.glob('wsclean_concat_*.MS')
+            logger.info(f'Continue clean on concat MSs {MSs_files_clean}')
+        MSs_files_clean = ' '.join(MSs_files_clean)
+    else:
+        MSs_files_clean = MSs_files
+
     wsc_parms = []
-    reordering_processors = np.min([len(MSs_files),s.max_processors])
+    reordering_processors = np.min([len(MSs_files_clean),s.max_processors])
 
     # basic parms
     wsc_parms.append( '-j '+str(s.max_processors)+' -reorder -parallel-reordering 4 ' )
@@ -368,8 +413,6 @@ def run_wsclean(s, logfile, MSs_files, do_predict=False, **kwargs):
         else:
             wsc_parms.append( '-idg-mode cpu' )
 
-    # other stanrdard parms
-    wsc_parms.append( '-clean-border 1' )
     # temp dir
     #if s.get_cluster() == 'Hamburg_fat' and not 'temp_dir' in list(kwargs.keys()):
     #    wsc_parms.append( '-temp-dir /localwork.ssd' )
@@ -384,16 +427,19 @@ def run_wsclean(s, logfile, MSs_files, do_predict=False, **kwargs):
         if parm == 'cont': 
             parm = 'continue'
             value = ''
+            # if continue, remove nans from previous models
+            lib_img.Image(kwargs['name']).nantozeroModel()
         if parm == 'size' and type(value) is int: value = '%i %i' % (value, value)
         if parm == 'size' and type(value) is list: value = '%i %i' % (value[0], value[1])
         wsc_parms.append( '-%s %s' % (parm.replace('_','-'), str(value)) )
 
     # files
-    wsc_parms.append( MSs_files )
+    wsc_parms.append( MSs_files_clean )
 
     # create command string
     command_string = 'wsclean '+' '.join(wsc_parms)
     s.add(command_string, log=logfile, commandType='wsclean', processors='max')
+    logger.info('Running WSClean...')
     s.run(check=True)
 
     # Predict in case update_model_required cannot be used
@@ -406,14 +452,18 @@ def run_wsclean(s, logfile, MSs_files, do_predict=False, **kwargs):
             if parm == 'name' or parm == 'channels_out' or parm == 'use_wgridder' or parm == 'wgridder_accuracy':
                 wsc_parms.append( '-%s %s' % (parm.replace('_','-'), str(value)) )
 
-        # files
+        # files (the original, not the concatenated)
         wsc_parms.append( MSs_files )
+        lib_img.Image(kwargs['name']).nantozeroModel() # If we have fully flagged channel, set to zero so we don't get error
+
         # Test without reorder as it apperas to be faster
         # wsc_parms.insert(0, ' -reorder -parallel-reordering 4 ')
         command_string = 'wsclean -predict -padding 1.8 ' \
                          '-j '+str(s.max_processors)+' '+' '.join(wsc_parms)
         s.add(command_string, log=logfile, commandType='wsclean', processors='max')
         s.run(check=True)
+    if not keep_concat:
+        check_rm('wsclean_concat_*.MS')
 
 def run_DDF(s, logfile, **kwargs):
     """
@@ -529,7 +579,8 @@ class Walker():
         self.filename = os.path.abspath(filename)
         self.__skip__ = False
         self.__step__ = None
-        self.__time__ = None
+        self.__inittime__ = None
+        self.__globaltimeinit__ = datetime.datetime.now()
 
     def if_todo(self, stepname):
         """
@@ -540,7 +591,7 @@ class Walker():
         self.__step__ = stepname
         with open(self.filename, "r") as f:
             for stepname_done in f:
-                if stepname == stepname_done.rstrip():
+                if stepname == stepname_done.split('#')[0].rstrip():
                     self.__skip__ = True
         return self
 
@@ -554,9 +605,8 @@ class Walker():
             frame = sys._getframe(1)
             frame.f_trace = self.trace
         else:
-            self.__time__ = time.time()
+            self.__timeinit__ = datetime.datetime.now()
             logger.log(20, '>> start >> {}'.format(self.__step__))
-
 
     def trace(self, frame, event, arg):
         raise Skip()
@@ -567,9 +617,9 @@ class Walker():
         """
         if type is None:
             with open(self.filename, "a") as f:
-                f.write(self.__step__ + '\n')
-            duration = (time.time() - self.__time__)/60.
-            logger.info(f'<< done << {self.__step__} (Duration: {duration:.2f} min)')
+                delta = 'h '.join(str(datetime.datetime.now() - self.__timeinit__).split(':')[:-1])+'m'
+                f.write(self.__step__ + ' # '+delta+' ' +'\n')
+            logger.info('<< done << {}'.format(self.__step__))
             return  # No exception
         if issubclass(type, Skip):
             logger.warning('>> skip << {}'.format(self.__step__))
@@ -577,6 +627,10 @@ class Walker():
         if issubclass(type, Exit):
             logger.error('<< exit << {}'.format(self.__step__))
             return True
+        
+    def alldone(self):
+        delta = 'h '.join(str(datetime.datetime.now() - self.__globaltimeinit__).split(':')[:-1])+'m'
+        logger.info('Done. Total time: '+delta)
 
 class Scheduler():
     def __init__(self, qsub = None, maxThreads = None, max_processors = None, log_dir = 'logs', dry = False):
@@ -822,3 +876,53 @@ class Scheduler():
 
         return 0
 
+def get_template_image(reference_ra_deg, reference_dec_deg, ximsize=512, yimsize=512, cellsize_deg=0.000417, fill_val=0):
+    """
+    Make a blank image and return
+    adapted from https://github.com/darafferty/LSMTool/blob/master/lsmtool/operations_lib.py#L619
+
+    Parameters
+    ----------
+    reference_ra_deg : float
+        RA for center of output image
+    reference_dec_deg : float
+        Dec for center of output image
+    ximsize : int, optional
+        Size of output image
+    yimsize : int, optional
+        Size of output image
+    cellsize_deg : float, optional
+        Size of a pixel in degrees
+    fill_val : int, optional
+        Value with which to fill the image
+    """
+
+    # Make fits hdu
+    # Axis order is [STOKES, FREQ, DEC, RA]
+    shape_out = [yimsize, ximsize]
+    hdu = fits.PrimaryHDU(np.ones(shape_out, dtype=np.float32)*fill_val)
+    hdulist = fits.HDUList([hdu])
+    header = hdulist[0].header
+
+    # Add RA, Dec info
+    i = 1
+    header['CRVAL{}'.format(i)] = reference_ra_deg
+    header['CDELT{}'.format(i)] = -cellsize_deg
+    header['CRPIX{}'.format(i)] = ximsize / 2.0
+    header['CUNIT{}'.format(i)] = 'deg'
+    header['CTYPE{}'.format(i)] = 'RA---SIN'
+    i += 1
+    header['CRVAL{}'.format(i)] = reference_dec_deg
+    header['CDELT{}'.format(i)] = cellsize_deg
+    header['CRPIX{}'.format(i)] = yimsize / 2.0
+    header['CUNIT{}'.format(i)] = 'deg'
+    header['CTYPE{}'.format(i)] = 'DEC--SIN'
+
+    # Add equinox
+    header['EQUINOX'] = 2000.0
+
+    # Add telescope
+    header['TELESCOP'] = 'LOFAR'
+
+    hdulist[0].header = header
+    return hdulist

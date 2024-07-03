@@ -25,7 +25,7 @@ extended_targets = [
     '3c454.3','3c465','3c84', '4c73.08', 'ngc6109', 'ngc6251'
 ]
 
-very_extended_targets = ['da240','3c236', '3c31']
+very_extended_targets = ['da240','3c236']
 
 difficult_targets = ["4c12.03", "3c212"]
 
@@ -293,6 +293,23 @@ class SelfCalibration(object):
                 commandType='DP3'
             )
             self.data_column = "CORRECTED_DATA"
+            
+    def correct(self, solution: str, column_in: str = "DATA", column_out: str = "CORRECTED_DATA", mode = None):
+        if "cal-Gp" in solution:
+            correction = "phase000"
+            soltab = ""
+        elif "cal-Ga" in solution:
+            correction = "fulljones"
+            soltab = "cor.soltab=[amplitude000,phase000]"
+
+        logger.info(f'Correction of {solution}...')
+        self.mss.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={column_in} \
+                msout.datacolumn={column_out} cor.parmdb={solution} \
+                cor.correction={correction} {soltab}' , 
+            log=f'$nameMS_cor_{solution}.log', 
+            commandType='DP3'
+        )
          
     def apply_mask(self, imagename: str, maskfits: str) -> None:
         beam02Reg, _, region = self.mask
@@ -306,9 +323,9 @@ class SelfCalibration(object):
             threshold = 5
             
         if self.stats == "core":
-            im.makeMask(mode="default", threshpix=5, rmsbox=(50,5), atrous_do=True)
+            im.makeMask(threshpix=5, rmsbox=(50,5), atrous_do=True)
         else:
-            im.makeMask(mode="default", threshpix=threshold, rmsbox=(50,5), atrous_do=True)
+            im.makeMask(threshpix=threshold, rmsbox=(50,5), atrous_do=True)
         
         if self.stats != "core" and TARGET in extended_targets:
             logger.info("Manual masks used")
@@ -510,7 +527,7 @@ class SelfCalibration(object):
         
         
         im = lib_img.Image(imagename+'-MFS-image.fits')
-        im.makeMask(self.s, self.cycle, threshpix=5, rmsbox=(500,30), atrous_do=False )
+        im.makeMask(threshpix=5, rmsbox=(500,30), atrous_do=False )
         rms_noise = float(im.getNoise()) 
         mm_ratio = float(im.getMaxMinRatio())
         logger.info('RMS noise: %f - MM ratio: %f' % (rms_noise, mm_ratio))

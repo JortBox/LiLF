@@ -33,51 +33,49 @@ class Image(object):
         self.userReg      = userReg
         self.beamReg      = beamReg
 
-    def calc_flux(self, img, mask):
+    def calc_flux(self, mask):
         """
         Get flux inside given region. Adapted from Martin Hardcastle's radiomap class
         """
-
-        fitsfile = img
         extract = mask
 
-        phdu = fits.open(fitsfile)
-        head, lhdu = flatten(phdu)
-        gfactor = 2.0 * np.sqrt(2.0 * np.log(2.0))
-        f = phdu[0]
-        prhd = phdu[0].header
-        units = prhd.get('BUNIT')
-        if units is None:
-            units = prhd.get('UNIT')
-        if units != 'JY/BEAM' and units != 'Jy/beam':
-            print('Warning: units are', units, 'but code expects JY/BEAM')
-        bmaj = prhd.get('BMAJ')
-        bmin = prhd.get('BMIN')
+        with fits.open(self.imagename) as phdu:
+            head, lhdu = flatten(phdu)
+            gfactor = 2.0 * np.sqrt(2.0 * np.log(2.0))
+            f = phdu[0]
+            prhd = phdu[0].header
+            units = prhd.get('BUNIT')
+            if units is None:
+                units = prhd.get('UNIT')
+            if units != 'JY/BEAM' and units != 'Jy/beam':
+                print('Warning: units are', units, 'but code expects JY/BEAM')
+            bmaj = prhd.get('BMAJ')
+            bmin = prhd.get('BMIN')
 
-        bmaj = np.abs(bmaj)
-        bmin = np.abs(bmin)
+            bmaj = np.abs(bmaj)
+            bmin = np.abs(bmin)
 
-        w = wcs.WCS(prhd)
-        cd1 = -w.wcs.cdelt[0]
-        cd2 = w.wcs.cdelt[1]
-        if ((cd1 - cd2) / cd1) > 1.0001 and ((bmaj - bmin) / bmin) > 1.0001:
-            print('Pixels are not square (%g, %g) and beam is elliptical' % (cd1, cd2))
+            w = self.getWCS()
+            cd1 = -w.wcs.cdelt[0]
+            cd2 = w.wcs.cdelt[1]
+            if ((cd1 - cd2) / cd1) > 1.0001 and ((bmaj - bmin) / bmin) > 1.0001:
+                print('Pixels are not square (%g, %g) and beam is elliptical' % (cd1, cd2))
 
-        bmaj /= cd1
-        bmin /= cd2
-        area = 2.0 * np.pi * (bmaj * bmin) / (gfactor * gfactor)
+            bmaj /= cd1
+            bmin /= cd2
+            area = 2.0 * np.pi * (bmaj * bmin) / (gfactor * gfactor)
 
-        d = [lhdu]
+            d = [lhdu]
 
-        region = pyregion.open(extract).as_imagecoord(prhd)
+            region = pyregion.open(extract).as_imagecoord(prhd)
 
-        for i, n in enumerate(d):
-            mask = region.get_mask(hdu=f, shape=np.shape(n))
-            data = np.extract(mask, d)
-            nndata = data[~np.isnan(data)]
-            flux = np.sum(nndata) / area
+            for i, n in enumerate(d):
+                mask = region.get_mask(hdu=f, shape=np.shape(n))
+                data = np.extract(mask, d)
+                nndata = data[~np.isnan(data)]
+                flux = np.sum(nndata) / area
 
-        return flux
+            return flux
 
     def rescaleModel(self, funct_flux):
         """
@@ -89,9 +87,9 @@ class Image(object):
         for model_img in sorted(glob.glob(self.root+'*model*.fits')):
             fits = pyfits.open(model_img)
             # get frequency
-            assert fits[0].header['CTYPE3'] == 'FREQ' # type: ignore
-            nu = fits[0].header['CRVAL3'] # type: ignore
-            data = fits[0].data # type: ignore
+            assert fits[0].header['CTYPE3'] == 'FREQ'
+            nu = fits[0].header['CRVAL3']
+            data = fits[0].data
             # find expected flux
             flux = funct_flux(nu)
             current_flux = np.sum(data)
@@ -99,13 +97,24 @@ class Image(object):
             scaling_factor = flux/current_flux
             logger.warning('Rescaling model %s by: %f' % (model_img, scaling_factor))
             data *= scaling_factor
-            fits[0].data = data # type: ignore
+            fits[0].data = data
             fits.writeto(model_img, overwrite=True)
             fits.close()
 
+    def nantozeroModel(self):
+        """
+        Set nan to 0 in all model images
+        """
+        for modelimage in sorted(glob.glob(self.root + '*model*.fits')):
+            with pyfits.open(modelimage, mode='update') as fits:
+                for hdu in fits:
+                    if np.isnan(hdu.data).any():
+                        logger.info(f"Model image '{modelimage}' has '{sum(np.isnan(hdu.data))}' NaN values (NaN -> zeros)")
+                    hdu.data[hdu.data != hdu.data] = 0
+
     # TODO: separate makemask (using breizorro) and makecat (using bdsf)
-    def makeMask(self, schedule=None, c=0, threshpix=5, atrous_do=False, rmsbox=(100,10), remove_extended_cutoff=0., only_beam=False, maskname=None,
-                 write_srl=False, write_gaul=False, write_ds9=False, mask_combine=None, mode="default"):
+    def makeMask(self, threshpix=5, atrous_do=False, rmsbox=(100,10), remove_extended_cutoff=0., only_beam=False, maskname=None,
+                 write_srl=False, write_gaul=False, write_ds9=False, mask_combine=None):
         """
         Create a mask of the image where only believable flux is
 
@@ -120,40 +129,18 @@ class Image(object):
 
         if not os.path.exists(maskname):
             logger.info('%s: Making mask (%s)...' % (self.imagename, maskname))
-            # replace following with the Breizorro code
-            
-            if mode == "breizorro" and schedule is not None:
-                schedule.add(
-                    f'/data/scripts/LiLF/scripts/breizorro.py \
-                        -t {threshpix} -r {self.imagename} \
-                        -b {rmsbox[0]} -o {maskname}', 
-                    log='makemask-c%02i.log' % c, 
-                    commandType='python' 
-                )
-                schedule.run()  
-                    
-            elif mode == "default":
-                make_mask.make_mask(
-                    image_name=self.imagename, 
-                    mask_name=maskname, 
-                    threshpix=threshpix, 
-                    atrous_do=atrous_do,
-                    rmsbox=rmsbox, 
-                    write_srl=write_srl, 
-                    write_gaul=write_gaul, 
-                    write_ds9=write_ds9, 
-                    mask_combine=mask_combine
-                )
+            make_mask.make_mask(image_name=self.imagename, mask_name=maskname, threshpix=threshpix, atrous_do=atrous_do,
+                                rmsbox=rmsbox, write_srl=write_srl, write_gaul=write_gaul, write_ds9=write_ds9, mask_combine=mask_combine)
 
         if remove_extended_cutoff > 0:
 
             # get data
             with pyfits.open(self.imagename) as fits:
-                data = np.squeeze(fits[0].data) # type: ignore
+                data = np.squeeze(fits[0].data)
 
             # get mask
             with pyfits.open(maskname) as fits:
-                mask = np.squeeze(fits[0].data) # type: ignore
+                mask = np.squeeze(fits[0].data)
 
                 # for each island calculate the catoff
                 blobs, number_of_blobs = label(mask.astype(int).squeeze(), structure=[[1,1,1],[1,1,1],[1,1,1]])
@@ -166,7 +153,7 @@ class Image(object):
                     #mask[0,0,this_blob] = ratio # debug
 
                 # write mask back
-                fits[0].data[0,0] = mask # type: ignore
+                fits[0].data[0,0] = mask
                 fits.writeto(maskname, overwrite=True)
 
         if self.userReg is not None:
@@ -192,7 +179,7 @@ class Image(object):
 
         if checkBeam:
             if self.beamReg is None:
-                raise('Missing beam in selectCC.') 
+                raise('Missing beam in selectCC.')
             logger.info('Predict (apply beam reg %s)...' % self.beamReg)
             blank_image_reg(maskname, self.beamReg, inverse=keepInBeam, blankval=0) # if keep_in_beam set to 0 everything outside beam.reg
 
@@ -209,7 +196,7 @@ class Image(object):
         lib_util.check_rm(self.skydb)
         os.system('makesourcedb outtype="blob" format="<" in="'+self.skymodel_cut+'" out="'+self.skydb+'"')
 
-    def getNoise(self, boxsize=None) -> np.float64:
+    def getNoise(self, boxsize=None):
         """
         Return the rms of all the non-masked pixels in an image
         boxsize : limit to central box of this pixelsize
@@ -218,8 +205,8 @@ class Image(object):
 
         with pyfits.open(self.imagename) as fits:
             with pyfits.open(self.maskname) as mask:
-                data = np.squeeze(fits[0].data) # type: ignore
-                mask = np.squeeze(mask[0].data) # type: ignore
+                data = np.squeeze(fits[0].data)
+                mask = np.squeeze(mask[0].data)
                 if boxsize is not None:
                     ys,xs = data.shape
                     data = data[ys/2-boxsize/2:ys/2+boxsize/2,xs/2-boxsize/2:xs/2+boxsize/2]
@@ -232,7 +219,7 @@ class Image(object):
         Return the ratio of the max over min in the image
         """   
         with pyfits.open(self.imagename) as fits:
-            data = np.squeeze(fits[0].data) # type: ignore
+            data = np.squeeze(fits[0].data)
             return np.abs(np.max(data)/np.min(data))
 
     def getBeam(self):
@@ -254,12 +241,26 @@ class Image(object):
         The flux of the image
         """
         with pyfits.open(self.imagename) as fits:
-            if fits[0].header['CTYPE3'] == 'FREQ': # type: ignore
-                return fits[0].header['CRVAL3'] # type: ignore
-            elif fits[0].header['CTYPE4'] == 'FREQ': # type: ignore
-                return fits[0].header['CRVAL4'] # type: ignore
+            if fits[0].header['CTYPE3'] == 'FREQ':
+                return fits[0].header['CRVAL3']
+            elif fits[0].header['CTYPE4'] == 'FREQ':
+                return fits[0].header['CRVAL4']
             else:
                 raise RuntimeError('Cannot find frequency in image %s' % self.imagename)
+
+    def getWCS(self, flat=True):
+        """
+        get the WCS from the fits image header
+        Returns
+        -------
+        WCS
+        """
+        with fits.open(self.imagename) as phdu:
+            if flat:
+                hdr, data_res = flatten(phdu)
+                return wcs.WCS(hdr)
+            else:
+                return wcs.WCS(phdu[0].header)
 
 
 def flatten(f, channel = 0, freqaxis = 0):
@@ -323,12 +324,12 @@ def blank_image_fits(filename, maskname, outfile = None, inverse = False, blankv
         outfile = filename
 
     with pyfits.open(maskname) as fits:
-        mask = fits[0].data # type: ignore
+        mask = fits[0].data
     
     if (inverse): mask = ~(mask.astype(bool))
 
     with pyfits.open(filename) as fits:
-        data = fits[0].data # type: ignore
+        data = fits[0].data
 
         assert mask.shape == data.shape # mask and data should be same shape
 
@@ -338,7 +339,7 @@ def blank_image_fits(filename, maskname, outfile = None, inverse = False, blankv
         fits.writeto(outfile, overwrite=True)
 
  
-def blank_image_reg(filename, region, outfile = None, inverse:bool = False, blankval = 0., op = "AND"):
+def blank_image_reg(filename, region, outfile = None, inverse = False, blankval = 0., op = "AND"):
     """
     Set to "blankval" all the pixels inside the given region
     if inverse=True, set to "blankval" pixels outside region.
@@ -357,7 +358,7 @@ def blank_image_reg(filename, region, outfile = None, inverse:bool = False, blan
 
     # open fits
     with pyfits.open(filename) as fits:
-        origshape    = fits[0].data.shape # type: ignore
+        origshape    = fits[0].data.shape
         header, data = flatten(fits)
         sum_before   = np.sum(data)
         if (op == 'AND'):
@@ -376,7 +377,7 @@ def blank_image_reg(filename, region, outfile = None, inverse:bool = False, blan
             total_mask = ~total_mask
         data[total_mask] = blankval
         # save fits
-        fits[0].data = data.reshape(origshape) # type: ignore
+        fits[0].data = data.reshape(origshape)
         fits.writeto(outfile, overwrite=True)
 
     logger.debug("%s: Blanking (%s): sum of values: %f -> %f" % (filename, region, sum_before, np.sum(data)))
@@ -404,11 +405,11 @@ def regrid(image_in, header_from, image_out):
     header_in, data_in = flatten(fits.open(image_in))
 
     # do the regrid
-    #logging.info('Regridding %s->%s' % (image_in, image_out))
+    logger.info('Regridding %s->%s' % (image_in, image_out))
     data_out, footprint = reproj((data_in, header_in), header_rep, parallel=True)
 
     # write output
-    header_rep =  fits.open(header_from)[0].header # type: ignore
+    header_rep =  fits.open(header_from)[0].header
     hdu = fits.PrimaryHDU(header=header_rep, data=[[data_out]])
     hdu.writeto(image_out, overwrite=True)
 
@@ -417,9 +418,9 @@ def add_beam(imagefile, bmaj, bmin, bpa):
     Add/change beam info to fits header
     """
     with pyfits.open(imagefile) as fits:
-        header = fits[0].header # type: ignore
+        header = fits[0].header
         header["BMAJ"] = bmaj
         header["BMIN"] = bmin
         header["BPA"] = bpa
-        fits[0].header = header # type: ignore
+        fits[0].header = header
         fits.writeto(imagefile, overwrite=True)
