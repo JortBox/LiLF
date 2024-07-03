@@ -220,14 +220,6 @@ def setup() -> None:
             #demix A-team sources if needed
             demix(MSs)
             
-            Logger.info('Beam correction (beam)...')
-            MSs.run(
-                'DP3 '+parset_dir+'/DP3-beam.parset msin=$pathMS msin.datacolumn=DATA \
-                    msout.datacolumn=DATA corrbeam.updateweights=True', 
-                log='$nameMS_cor1_beam.log', 
-                commandType='DP3'
-            )
-            
             # Correct data from calibrator step (pa, amp, beam, iono)
             correct_from_callibrator(MSs, timestamp)
             
@@ -566,7 +558,7 @@ def main(args: argparse.Namespace) -> None:
                     if cycle == 1 or args.do_core_scalar_solve:
                         calibration.solve_gain('phase') 
                     
-                    if not args.scalar_only and cycle > 0:
+                    if not args.scalar_only and cycle > 1:
                         calibration.solve_gain(
                             "fulljones", 
                             bl_smooth_fj=args.bl_smooth_fj, 

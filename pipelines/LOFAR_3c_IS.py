@@ -259,15 +259,14 @@ def setup() -> None:
     
             MSs = MeasurementSets([MS_concat_int], SCHEDULE)
             
-            #flagging(MSs)
+            # flag bad stations, and low-elev
+            flagging(MSs)
             
             #demix A-team sources if needed
             demix(MSs)
             
             # Correct data from calibrator step (pa, amp, beam, iono)
             correct_from_callibrator(MSs, timestamp)
-            
-            #align phases to source if mismatch >5 arcmin
             
             #align phases to source if mismatch >5 arcmin
             #try: MS_concat_int = align_phasecenter(MSs, timestamp)
@@ -570,7 +569,7 @@ def main(args: argparse.Namespace) -> None:
             )   
         except:
             pass
-        
+        '''
         calibration = pipeline.SelfCalibration(
             MSs, 
             schedule=SCHEDULE, 
@@ -582,7 +581,7 @@ def main(args: argparse.Namespace) -> None:
         
         calibration.empty_clean(f"img/{TARGET}-img-empty-int")
         sys.exit()
-
+        '''
         if stations == "dutch": 
             with WALKER.if_todo('phaseupCS ' + stations):
                 MSs = phaseup(MSs, stations, do_test=args.do_test)
