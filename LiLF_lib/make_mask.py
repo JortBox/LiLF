@@ -24,6 +24,7 @@ def make_mask(image_name, mask_name=None, threshpix=5, atrous_do=False, rmsbox=(
     if mask_name == None: mask_name = image_name+'.newmask'
     if os.path.exists(mask_name): os.system('rm -r ' + mask_name)
     img.export_image(img_type='island_mask', img_format='fits', outfile=mask_name, clobber=True)
+    img.export_image(img_type='gaus_model', img_format='fits', outfile=image_name+'-model', clobber=True)
 
     # WRITE CATALOGUE
     if write_srl:

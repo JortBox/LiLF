@@ -229,7 +229,7 @@ with w.if_todo('pre_cal'):
     # Solve cal_SB.MS:DATA CS-CS baselines(only solve) # not more smoothing since in rare case some CS have strong delay!
     logger.info('Calibrating IONO (Core Stations)...')
     MSs_concat_all.run('DP3 ' + parset_dir + '/DP3-soldd.parset msin=$pathMS msin.datacolumn=SMOOTHED_DATA \
-                        sol.h5parm=$pathMS/preiono.h5 sol.mode=scalarphase sol.solint=16 sol.nchan=1 msin.baseline="CS*&CS*" \
+                        sol.h5parm=$pathMS/preiono.h5 sol.mode=scalarphase sol.solint=16 sol.nchan=1 msin.baseline="CS*&" \
                         sol.smoothnessconstraint=0.5e6 ', log='$nameMS_solIONO_CS.log',
                        commandType="DP3")
 
@@ -357,7 +357,7 @@ with w.if_todo('cal_iono'):
     # Solve cal_SB.MS:DATA CS-CS baselines(only solve) # not more smoothing since in rare case some CS have strong delay!
     logger.info('Calibrating IONO (Core Stations)...')
     MSs_concat_all.run('DP3 ' + parset_dir + '/DP3-soldd.parset msin=$pathMS msin.datacolumn=SMOOTHED_DATA \
-                        sol.h5parm=$pathMS/iono.h5 sol.mode=scalarphase sol.solint=16 sol.nchan=1 msin.baseline="CS*&CS*" \
+                        sol.h5parm=$pathMS/iono.h5 sol.mode=scalarphase sol.solint=16 sol.nchan=1 msin.baseline="CS*&" \
                         sol.smoothnessconstraint=0.5e6 ', log='$nameMS_solIONO_CS.log',
                        commandType="DP3")
 
@@ -409,11 +409,31 @@ with w.if_todo('cal_bp'):
     MSs_concat_all.run('DP3 ' + parset_dir + '/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA \
                    cor.parmdb=cal-pa.h5 cor.correction=polalign', log='$nameMS_corPA.log', commandType="DP3")
     
+    
+    
+    
     # Correct beam concat_all-phaseup.MS:CORRECTED_DATA -> CORRECTED_DATA
     logger.info('Beam correction...')
     MSs_concat_all.run("DP3 " + parset_dir + '/DP3-beam.parset msin=$pathMS corrbeam.updateweights=False', 
                            log='$nameMS_beam.log', commandType="DP3")
+    '''
+    logger.info('Faraday rotation correction...')
+    MSs_concat_all.run(
+        'DP3 ' + parset_dir + '/DP3-cor.parset msin=$pathMS cor.parmdb=cal-fr.h5 cor.correction=rotationmeasure000',
+        log='$nameMS_corFR.log', commandType="DP3")
     
+    # Smooth data concat_all.MS:CORRECTED_DATA -> SMOOTHED_DATA (BL-based smoothing)
+    MSs_concat_all.run_Blsmooth(incol='CORRECTED_DATA', nofreq=True, logstr='smooth3')
+
+    # Solve cal_SB.MS:SMOOTHED_DATA (only solve) against FR-corrupted MODEL_DATA
+    logger.info('Calibrating BP...')
+    MSs_concat_all.run('DP3 ' + parset_dir + '/DP3-soldd.parset msin=$pathMS sol.h5parm=$pathMS/bp.h5 sol.mode=diagonal \
+                        sol.smoothnessconstraint=0.1e6 sol.smoothnessreffrequency=54e6 sol.solint=8 sol.nchan=1',
+                        log='$nameMS_solBP.log', commandType="DP3")
+    
+    
+    
+    #'''
     ## FR corruption concat_all-phaseup.MS:MODEL_DATA -> FR_MODEL_DATA
     logger.info('Faraday rotation corruption (MODEL_DATA - > FR_MODEL_DATA)...')
     MSs_concat_all.run('DP3 ' + parset_dir + '/DP3-cor.parset msin=$pathMS msin.datacolumn=MODEL_DATA msout.datacolumn=FR_MODEL_DATA \
@@ -435,7 +455,7 @@ with w.if_todo('cal_bp'):
     MSs_concat_all.run('DP3 ' + parset_dir + '/DP3-soldd.parset msin=$pathMS sol.h5parm=$pathMS/bp.h5 sol.mode=diagonal \
                         sol.modeldatacolumns=[FR_MODEL_DATA] sol.solint='+str(timestep)+' sol.nchan=1',
                        log='$nameMS_solBP.log', commandType="DP3")
-
+    #'''
     flag_parset = '/losoto-flag-sparse.parset' if sparse_sb else '/losoto-flag.parset'
     lib_util.run_losoto(s, 'bp', [ms + '/bp.h5' for ms in MSs_concat_all.getListStr()],
                         [parset_dir + flag_parset, parset_dir + '/losoto-bp.parset'])

@@ -61,7 +61,7 @@ def plot_SED(source: Source3C):
     #    fluxes.append(asis.measure_flux(source.path, threshold=9))
     #    source.SED.insert(fluxes[-1]*u.Jy)
     
-    source.set_data(f"{DATA_DIR}/{source.name}/img/img-core-02-MFS-image.fits")
+    source.set_data(f"{DATA_DIR_HOME}/{source.name}/img/img-core-02-MFS-image.fits")
     source.SED.insert(asis.measure_flux(source.path, threshold=9)*u.Jy)
     
     asis.query_fluxes_ned(source)
@@ -156,14 +156,14 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
         vmax = 1.
 
     gc.show_colorscale(cmap='inferno', vmin=vmin, vmax=vmax*max, stretch='log', vmid=5*vmin)
-    gc.show_contour('test.fits', colors=annotation_color, levels=levels, alpha=0.4, linewidths=1) # type: ignore
+    #gc.show_contour('test.fits', colors=annotation_color, levels=levels, alpha=0.4, linewidths=1) # type: ignore
 
     gc.add_beam(color="none", edgecolor=annotation_color)
     gc.add_label(0.495, 0.94, source.name, relative=True, size=25, color=annotation_color)
     
-    gc.add_colorbar()
-    gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
-    gc.colorbar.set_axis_label_font(size=fontsize)
+    #gc.add_colorbar()
+    #gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
+    #gc.colorbar.set_axis_label_font(size=fontsize)
     #gc.colorbar.set_font(size=fontsize)
     axes = aplpy.AxisLabels(gc)
     axes.hide()
@@ -181,47 +181,50 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
 
     gc.tick_labels.set_font(size=fontsize)
     gc.axis_labels.set_font(size=fontsize)
-    if not os.path.exists("plots/"):
-        os.mkdir("plots/")
-    gc.save(f"plots/{source.name}{suffix}.pdf")
+    if not os.path.exists("plots_nc/"):
+        os.mkdir("plots_nc/")
+    gc.save(f"plots_nc/{source.name}{suffix}_no_contour.pdf")
     
     os.remove('test.fits')
     plt.clf()
     
 if __name__ == "__main__":
-    DATA_DIR = "/home/iranet/groups/lofar/j.boxelaar/products/3Csurvey"
+    DATA_DIR_HOME = "/home/iranet/groups/lofar/j.boxelaar/products/3Csurvey"
+    DATA_DIR_LOCAL = "/home/local/work/j.boxelaar/data/3Csurvey/tgts"
+
     
-    
-    all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR}/*"))]
+    all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR_HOME}/*"))]
     catalog = asis.Catalogue3C(all_targets, use_cache=False)
+    #catalog = asis.Catalogue3C(["3c274"], use_cache=False)
     
     for source in catalog:
-        if source.name in ["3c296"]:
-            continue
-        
-        paths = sorted(glob.glob(f"{DATA_DIR}/{source.name}/img/img-all-*-MFS-image.fits"))
+        paths = sorted(glob.glob(f"{DATA_DIR_LOCAL}/{source.name}/img/img-all-*-MFS-image.fits"))
         if len(paths) <= 1:
-            paths = sorted(glob.glob(f"/home/local/work/j.boxelaar/data/3Csurvey/tgts/{source.name}/img/img-all-*-MFS-image.fits"))
+            paths = sorted(glob.glob(f"{DATA_DIR_HOME}/{source.name}/img/img-all-*-MFS-image.fits"))
             if len(paths) <= 1:
                 print(f"Failed to plot {source.name}")
                 continue
         
-        path = paths[-2]
+        path = paths[-2]   
+        if source.name == "3c296":
+            path = f"{DATA_DIR_HOME}/{source.name}/img/img-all-04-MFS-image.fits"
+        
         if os.path.exists(path):
             source.set_data(path) 
         else:
             print(f"Failed to plot {source.name}. path does not exist")
             continue
         
-        
+        vmax=1
         if source.name in very_extended_targets or source.name in ["3c274", "3c236"]:
             size = int(source.data.shape[0]//2)
+            vmax = 0.2
         elif source.name in extended_targets:
             size = 800
         else:
             size=300
             
-        plot_galaxy(source, vmax=1., vmin=-4.*source.rms.value, size=size)
+        plot_galaxy(source, vmax=vmax, vmin=-4.*source.rms.value, size=size)
         
         #try: plot_SED(source)
         #except: print("Failed to plot SED")

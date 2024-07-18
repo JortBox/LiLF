@@ -26,6 +26,7 @@ def get_argparser() -> argparse.Namespace:
     parser.add_argument('-cc', '--cycles_core', dest='total_cycles_core', type=int, default=None)
     parser.add_argument('-ca', '--cycles_all', dest='total_cycles_all', type=int, default=None)
     parser.add_argument('-m', '--manual_mask', dest='manual_mask', action='store_true', default=False)
+    parser.add_argument('--subtract_source', dest='subtract_source', type=str, default=None)
     parser.add_argument('--do_core_scalar_solve', dest='do_core_scalar_solve', action='store_true', default=False)
     parser.add_argument('--do_test', dest='do_test', action='store_true', default=False)
     parser.add_argument('--no_phaseup', dest='no_phaseup', action='store_true', default=False)
@@ -152,7 +153,7 @@ def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
     
     table = Ned.query_object(TARGET)
     target_coord = SkyCoord(
-        ra = float(table["RA"]),  # type: ignore
+        ra = float(table["RA"]),  # type: ign
         dec = float(table["DEC"]),  # type: ignore
         unit = (u.deg, u.deg), 
         frame = 'fk4'
@@ -161,7 +162,7 @@ def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
     
     seperation = phasecenter.separation(target_coord).arcmin
 
-    if seperation > 5: #type: ignore
+    if seperation > 3: #type: ignore
         Logger.info(f"Source is {seperation:.1f} arcmin away from phasecenter. aligning phases to source")
         MSs.run(
             f"DP3 {parset_dir}/DP3-shift.parset \
@@ -438,7 +439,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
         # Predict MODEL_DATA
         Logger.info('Predict (DP3)...')
         MSs.run(
-            f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb} pre.sources=VirA', 
+            f'DP3 {parset_dir}/DP3-predict.parset msin=$pathMS pre.usebeammodel=true pre.sourcedb={sourcedb} ',#pre.sources=VirA', 
             log='$nameMS_pre.log', 
             commandType='DP3'
         )
@@ -486,9 +487,8 @@ def clean_specific(mode: str) -> None :
     
 def main(args: argparse.Namespace) -> None:
     stopping=False
+    setup()
     for stations in args.stations:
-        setup()
-        
         try:
             MSs = MeasurementSets(
                 sorted(glob.glob(f'*concat_{stations}.MS')), 
@@ -503,7 +503,7 @@ def main(args: argparse.Namespace) -> None:
                 MSs = phaseup(MSs, stations, do_test=args.do_test)
             
             MSs = MeasurementSets(
-                glob.glob(f'*concat_{stations}.MS-phaseup'), 
+                sorted(glob.glob(f'*concat_{stations}.MS-phaseup')), 
                 SCHEDULE, 
                 check_flags=False, 
                 check_sun=True
@@ -513,7 +513,7 @@ def main(args: argparse.Namespace) -> None:
             clean_specific(stations)  
             
         # make beam region files
-        masking = pipeline.make_beam_region(MSs, TARGET)
+        masking = pipeline.make_beam_region(MSs, TARGET, parset_dir)
         
         # Predict model    
         with WALKER.if_todo('predict_' + stations):  
@@ -574,7 +574,10 @@ def main(args: argparse.Namespace) -> None:
                         Logger.info("Amplitude solve activated")
                            
                     if calibration.doph:
-                        calibration.solve_gain('scalar')
+                        if TARGET == "3c449":
+                            calibration.solve_gain('scalar',solint=10)
+                        else:
+                            calibration.solve_gain('scalar')
                     
                     if calibration.doamp and not args.scalar_only and cycle > 1:
                         if args.no_fulljones:
@@ -588,13 +591,21 @@ def main(args: argparse.Namespace) -> None:
                             )
                             # Do extra amp solve to do the ampnorm afterwards 
                             
+            if args.subtract_source is not None:
+                with WALKER.if_todo(f"subtract_{stations}_c{cycle}"):
+                    calibration.subtract_infield_source(args.subtract_source, args.data_dir+'/'+args.subtract_source)
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
-                #calibration.empty_clean(f"img/img-empty-c{cycle}")
-                
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 try:
-                    calibration.clean(imagename, apply_beam=args.apply_beam)
+                    if TARGET == "3c274":
+                        calibration.mask = pipeline.make_beam_region(MSs, TARGET+"_core", parset_dir)
+                        calibration.clean(imagename+"_center", apply_beam=args.apply_beam)
+                        calibration.mask = pipeline.make_beam_region(MSs, TARGET, parset_dir)
+                        calibration.clean(imagename, apply_beam=args.apply_beam)
+                    else:
+                        calibration.clean(imagename, apply_beam=args.apply_beam)
+                        
                     rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 except RuntimeError:
                     Logger.error(f"Failed to clean {imagename}")
@@ -604,8 +615,6 @@ def main(args: argparse.Namespace) -> None:
                     break
                 
             if stopping or cycle == calibration.stop:
-            #    Logger.info("Start Peeling")                
-            #    #pipeline.peel(peel_mss, calibration.s)
                 break
             
         with WALKER.if_todo(f"save_{stations}_history"):

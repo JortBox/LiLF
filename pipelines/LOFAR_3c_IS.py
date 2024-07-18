@@ -76,14 +76,126 @@ def run_test(measurements: MeasurementSets) -> None:
     
     for ms in test_mss.getListStr():
         lilf.check_rm(ms)
-        
+
 def get_cal_dir(timestamp: str, logger = None, int_data = False) -> list:
     """
     Get the proper cal directory from a timestamp
     """
     dirs = list()
     if int_data:
-        cal_directories = sorted(glob.glob('/home/iranet/groups/lofar/j.boxelaar/data/icals_old/3c*'))
+        cal_directories = sorted(glob.glob('/home/iranet/groups/lofar/j.boxelaar/data/icals/3c*'))
+    else:
+        cal_directories = sorted(glob.glob('/home/local/work/j.boxelaar/data/3Csurvey/cals/3c*'))
+        
+    for cal_dir in cal_directories:
+        calibrator = cal_dir.split("/")[-1]
+        cal_timestamps = set()
+        for ms in glob.glob(cal_dir+'/20*/data-bkp/*MS'):
+            cal_timestamps.add("_".join(ms.split("/")[-1].split("_")[:2]))
+            
+        if f"{calibrator}_t{timestamp}" in cal_timestamps:
+            if logger is not None:
+                logger.info('Calibrator found: %s (t=%s)' % (cal_dir, timestamp))
+            if int_data:
+                dirs.append(f"{cal_dir}/{timestamp}")
+            else:
+                dirs.append(f"{cal_dir}/{timestamp[:8]}/solutions")
+        else:
+            pass
+        
+    if dirs == []:
+        if logger is not None:
+            logger.error('Missing calibrator.')
+        sys.exit()
+    return dirs  
+
+def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
+    cal_dir = get_cal_dir(timestamp, logger=Logger)
+    cal_dir_is = get_cal_dir(timestamp, logger=Logger, int_data=INT_DATA)
+    
+    using_dir = cal_dir[-1]
+    using_dir_is = cal_dir_is[-1]
+    for dir in cal_dir:
+        if TARGET in dir:
+            using_dir = dir
+    
+    Logger.info(f"Using cal: {using_dir_is}")
+        
+    h5_pa = using_dir_is + '/cal-pa.h5'
+    h5_amp = using_dir_is + '/cal-bp.h5'
+    h5_iono = using_dir_is + '/cal-iono.h5'
+    h5_iono_cs = using_dir_is + '/cal-iono-cs.h5'
+    h5_fr = using_dir_is + '/cal-fr.h5'
+    assert os.path.exists(h5_pa)
+    assert os.path.exists(h5_amp)
+    assert os.path.exists(h5_iono)
+    assert os.path.exists(h5_fr)
+    
+    
+    # Apply cal sol - SB.MS:DATA -> SB.MS:CORRECTED_DATA (polalign corrected)
+    Logger.info('Apply solutions (pa)...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA msout.datacolumn=DATA\
+            cor.parmdb={h5_pa} cor.correction=polalign', 
+        log='$nameMS_cor1_pa.log', 
+        commandType='DP3'
+    )
+    
+    # Beam correction CORRECTED_DATA -> CORRECTED_DATA (polalign corrected, beam corrected+reweight)
+    Logger.info('Beam correction (beam)...')
+    MSs.run(
+        'DP3 '+parset_dir+'/DP3-beam.parset msin=$pathMS msin.datacolumn=DATA \
+            msout.datacolumn=DATA corrbeam.updateweights=True', 
+        log='$nameMS_cor1_beam.log', 
+        commandType='DP3'
+    )
+    
+    # Correct amp BP CORRECTED_DATA -> CORRECTED_DATA
+    Logger.info('BP correction...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS cor.parmdb={h5_amp} \
+            msin.datacolumn=DATA msout.datacolumn=DATA \
+            cor.correction=amplitudeSmooth cor.updateweights=False',
+        log='$nameMS_corBP.log', 
+        commandType="DP3"
+    )
+    
+    # Correct FR CORRECTED_DATA -> CORRECTED_DATA
+    Logger.info('Faraday rotation correction...')
+    MSs.run(
+        f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS cor.parmdb={h5_fr} \
+            msin.datacolumn=DATA msout.datacolumn=DATA cor.correction=rotationmeasure000', 
+        log='$nameMS_corFR2.log', 
+        commandType="DP3"
+    )
+    
+    # Correct iono concat_all:CORRECTED_DATA -> CORRECTED_DATA
+    Logger.info('Iono correction...')
+    MSs.run(
+        f"DP3 {parset_dir}/DP3-cor.parset msin=$pathMS cor.parmdb={h5_iono_cs} \
+            msin.datacolumn=DATA msout.datacolumn=DATA cor.correction=phase000", 
+        log='$nameMS_corIONO_CS.log', 
+        commandType="DP3"
+    )
+    MSs.run(
+        f"DP3 {parset_dir}/DP3-cor.parset msin=$pathMS cor.parmdb={h5_iono} \
+            msin.datacolumn=DATA msout.datacolumn=DATA \
+            cor.correction=phase000",
+        log='$nameMS_corIONO.log', 
+        commandType="DP3"
+    )
+
+
+
+
+        
+def get_cal_dir_IS(timestamp: str, logger = None, int_data = False) -> list:
+    """
+    Get the proper cal directory from a timestamp
+    """
+    dirs = list()
+    if int_data:
+        cal_directories = sorted(glob.glob('/home/iranet/groups/lofar/j.boxelaar/data/icals/3c*'))
     else:
         cal_directories = sorted(glob.glob('/data/data/3Csurvey/cals/3c*'))
         
@@ -96,7 +208,7 @@ def get_cal_dir(timestamp: str, logger = None, int_data = False) -> list:
         if f"{calibrator}_t{timestamp}" in cal_timestamps:
             if logger is not None:
                 logger.info('Calibrator found: %s (t=%s)' % (cal_dir, timestamp))
-            dirs.append(f"{cal_dir}/{timestamp[:8]}/solutions")
+            dirs.append(f"{cal_dir}/{timestamp}")
             #dirs.append(f"{cal_dir}/{timestamp}/solutions")
         else:
             pass
@@ -105,9 +217,8 @@ def get_cal_dir(timestamp: str, logger = None, int_data = False) -> list:
         if logger is not None:
             logger.error('Missing calibrator.')
         sys.exit()
-    return dirs
-    
-
+    return dirs  
+'''
 def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
     cal_dir = get_cal_dir(timestamp, logger=Logger, int_data=INT_DATA)
     
@@ -124,13 +235,13 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
             Logger.info(f"Using cal: {using_dir}")
         
     h5_pa = using_dir + '/cal-pa.h5'
-    h5_bp = using_dir + '/cal-amp.h5' #'/cal-bp.h5'
-    #h5_iono_cs = using_dir + '/cal-iono-cs.h5'
+    h5_bp = using_dir + '/cal-bp.h5'
+    h5_iono_cs = using_dir + '/cal-iono-cs.h5'
     h5_iono = using_dir + '/cal-iono.h5'
     h5_fr = using_dir + '/cal-fr.h5'
     assert os.path.exists(h5_pa), f"Missing {h5_pa}"
     assert os.path.exists(h5_bp), f"Missing {h5_bp}"
-    #assert os.path.exists(h5_iono_cs), f"Missing {h5_iono_cs}"
+    assert os.path.exists(h5_iono_cs), f"Missing {h5_iono_cs}"
     assert os.path.exists(h5_iono), f"Missing {h5_iono}"
     assert os.path.exists(h5_fr), f"Missing {h5_fr}"
     
@@ -161,7 +272,7 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
         log='$nameMS_cor1_bp.log', 
         commandType='DP3'
     )
-    '''
+
     # Correct iono concat_all:CORRECTED_DATA -> CORRECTED_DATA
     Logger.info('Iono correction...')
     MSs.run(
@@ -170,7 +281,6 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
         log='$nameMS_corIONO_CS.log', 
         commandType="DP3"
     )
-    '''
     MSs.run(
         f"DP3 {parset_dir}/DP3-cor.parset msin=$pathMS cor.parmdb={h5_iono} \
             msin.datacolumn=CORRECTED_DATA msout.datacolumn=DATA \
@@ -181,6 +291,7 @@ def correct_from_callibrator(MSs: MeasurementSets, timestamp: str) -> None:
     
     empty_clean(MSs, f"img/{timestamp}-img-empty-int")
 
+'''
 def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
     phasecenter = MSs.getListObj()[0].getPhaseCentre()
     phasecenter = SkyCoord(
@@ -221,14 +332,12 @@ def align_phasecenter(MSs: MeasurementSets, timestamp) -> str:
 def setup() -> None:
     global INT_DATA
     MSs_list = MeasurementSets( 
-        glob.glob(DATA_DIR+'/data/*MS'), 
+        sorted(glob.glob(DATA_DIR+'/data/*MS')), 
         SCHEDULE, 
         check_flags=False
     ).getListStr()
     
-    
-    
-    for timestamp in set([ os.path.basename(ms).split('_')[1][1:] for ms in MSs_list ]):
+    for timestamp in list(set([ os.path.basename(ms).split('_')[1][1:] for ms in MSs_list ])):
         mss_toconcat = sorted(glob.glob(f'{DATA_DIR}/data/{TARGET}_t{timestamp}_SB*.MS'))
         MS_concat_bkp = f'{TARGET}_t{timestamp}_concat.MS-bkp'
         
@@ -250,8 +359,8 @@ def setup() -> None:
             Logger.info('Making %s...' % MS_concat_int)
             SCHEDULE.add(
                 f'DP3 {parset_dir}/DP3-avg.parset msin=\"{str(mss_toconcat)}\" \
-                    msin.baseline="*&" msout={MS_concat_int} avg.freqstep=1 \
-                    avg.timestep=1',
+                    msin.baseline="*&" msout={MS_concat_int} avg.freqstep=2 \
+                    avg.timestep=2',
                 log=MS_concat_int+'_avg.log', 
                 commandType='DP3'
             )
@@ -294,69 +403,67 @@ def setup() -> None:
     
     
 
-def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> MeasurementSets:
+def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True, sol_dir:str="") -> MeasurementSets:
+    data_in = "DATA"
+    
+    Logger.info('Correcting CS...')
+    fulljones_solution = sorted(glob.glob(sol_dir+"cal-Ga*core-ampnorm.h5"))
+    solution = sorted(glob.glob(sol_dir+"cal-Gp*core-ampnorm.h5"))
+    final_cycle_sol = 0
+    final_cycle_fj = 0
+    
+    if len(solution) != 0 or len(fulljones_solution) != 0:
+        rms_history = np.loadtxt(f'{sol_dir}rms_noise_history_core.csv', delimiter=",")
+        ratio_history = np.loadtxt(f'{sol_dir}mm_ratio_noise_history_core.csv', delimiter=",")
+        
+        assert len(rms_history) == len(ratio_history)
+        if np.argmax(ratio_history) == 0:
+            correct_cycle = 1
+        elif np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
+            correct_cycle = - 1
+        else:
+            correct_cycle = np.argmax(ratio_history) - len(ratio_history)
+    
+    if len(solution) != 0:
+        final_cycle_sol = int(solution[-1].split("-")[2][1:])
+    if len(fulljones_solution) != 0:
+        final_cycle_fj = int(fulljones_solution[-1].split("-")[2][1:])
+        
+
+    if final_cycle_sol >= final_cycle_fj  and  final_cycle_sol > 0:
+        Logger.info(f"correction Gain-scalar of {solution[correct_cycle]}")
+        # correcting CORRECTED_DATA -> CORRECTED_DATA
+        MSs.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
+                cor.parmdb={solution[correct_cycle]} cor.correction=phase000',
+            log='$nameMS_corPH-core.log', 
+            commandType='DP3'
+        )
+        data_in = "CORRECTED_DATA"
+    else:
+        Logger.warning(f"No phase Core corrections found. Phase-up not recommended")
+    
+    
+    if final_cycle_fj >= final_cycle_sol and final_cycle_fj > 0:
+        Logger.info(f"Correction Gain of {fulljones_solution[correct_cycle]}")
+        # correcting CORRECTED_DATA -> CORRECTED_DATA
+        MSs.run(
+            f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
+                cor.parmdb={fulljones_solution[correct_cycle]} cor.correction=fulljones \
+                cor.soltab=[amplitude000,phase000]',
+            log='$nameMS_corAMPPHslow-core.log', 
+            commandType='DP3'
+        )
+        data_in = "CORRECTED_DATA"
+    else:
+        Logger.warning(f"No fulljones Core corrections found. Phase-up not recommended")
+    
+    if do_test:
+        run_test(MSs)
+        
+        
     if stats == "dutch":
-        Logger.info('Correcting CS...')
-        fulljones_solution = sorted(glob.glob("cal-Ga*core-ampnorm.h5"))
-        solution = sorted(glob.glob("cal-Gp*core-ampnorm.h5"))
-        final_cycle_sol = 0
-        final_cycle_fj = 0
-        data_in = "DATA"
-        
-        if len(solution) != 0 or len(fulljones_solution) != 0:
-            rms_history = np.loadtxt(f'rms_noise_history_core.csv', delimiter=",")
-            ratio_history = np.loadtxt(f'mm_ratio_noise_history_core.csv', delimiter=",")
-            
-            assert len(rms_history) == len(ratio_history)
-            if np.argmax(ratio_history) == 0:
-                correct_cycle = 1
-            elif np.argmin(rms_history) == len(rms_history) - 1 and np.argmax(ratio_history) == len(ratio_history) - 1:
-                correct_cycle = - 1
-            else:
-                correct_cycle = np.argmax(ratio_history) - len(ratio_history)
-        
-        
-        if len(solution) != 0:
-            final_cycle_sol = int(solution[-1].split("-")[2][1:])
-        if len(fulljones_solution) != 0:
-            final_cycle_fj = int(fulljones_solution[-1].split("-")[2][1:])
-
-        #print(final_cycle_sol, final_cycle_fj)
-        #print(0 > final_cycle_sol >= final_cycle_fj)
-        print(correct_cycle)
-
-        if final_cycle_sol >= final_cycle_fj  and  final_cycle_sol > 0:
-            Logger.info(f"correction Gain-scalar of {solution[correct_cycle]}")
-            # correcting CORRECTED_DATA -> CORRECTED_DATA
-            MSs.run(
-                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
-                    cor.parmdb={solution[correct_cycle]} cor.correction=phase000',
-                log='$nameMS_corPH-core.log', 
-                commandType='DP3'
-            )
-            data_in = "CORRECTED_DATA"
-        else:
-            Logger.warning(f"No phase Core corrections found. Phase-up not recommended")
-        
-        
-        if final_cycle_fj >= final_cycle_sol and final_cycle_fj > 0:
-            Logger.info(f"Correction Gain of {fulljones_solution[correct_cycle]}")
-            # correcting CORRECTED_DATA -> CORRECTED_DATA
-            MSs.run(
-                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
-                    cor.parmdb={fulljones_solution[correct_cycle]} cor.correction=fulljones \
-                    cor.soltab=[amplitude000,phase000]',
-                log='$nameMS_corAMPPHslow-core.log', 
-                commandType='DP3'
-            )
-            data_in = "CORRECTED_DATA"
-        else:
-            Logger.warning(f"No fulljones Core corrections found. Phase-up not recommended")
-        
-        if do_test:
-            run_test(MSs)
-           
-        if INT_DATA:
+        if not args.no_phaseup:
             source_angular_diameter = 0.
             baseline = "CS*"
             stations = "{SuperStLBA:'%s'}" % baseline
@@ -417,19 +524,54 @@ def phaseup(MSs: MeasurementSets, stats: str, do_test: bool = True) -> Measureme
         os.system(f'rm -r *concat_core.MS')
     
     
-    elif stats == "def":
-        with WALKER.if_todo('phaseupCS_' + stats):
-            # Phasing up the cose stations
-            # Phaseup CORRECTED_DATA -> DATA
-            Logger.info('Phasing up superterp Stations...')
-            lilf.check_rm(f'*{stats}.MS-phaseup')
-            MSs.run(
-                f"DP3 {parset_dir}/DP3-phaseup-def.parset msin=$pathMS \
-                    msin.datacolumn=DATA msout=$pathMS-phaseup ", 
-                log=f'$nameMS_phaseup.log', 
-                commandType="DP3"
+    elif stats == "int":
+        dutch_sol_ph = sorted(glob.glob(sol_dir+"cal-Gp*dutch-ampnorm.h5"))[-2]
+        dutch_sol_fj = sorted(glob.glob(sol_dir+"cal-Ga*dutch-ampnorm.h5"))[-2]
+        
+        if os.path.exists(dutch_sol_ph):
+            Logger.info(f"correction Gain-scalar of {dutch_sol_ph}")
+            MSs.run(  
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
+                    cor.parmdb={dutch_sol_ph} cor.correction=phase000',
+                log='$nameMS_corPH-core.log', 
+                commandType='DP3'
             )
-            os.system(f'rm -r *concat_{stats}.MS')
+            data_in = "CORRECTED_DATA"
+        else:
+            Logger.warning(f"No phase Core corrections found.")
+        
+        
+        if os.path.exists(dutch_sol_fj):
+            Logger.info(f"Correction Gain of {dutch_sol_fj}")
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn={data_in} \
+                    cor.parmdb={dutch_sol_fj} cor.correction=fulljones \
+                    cor.soltab=[amplitude000,phase000]',
+                log='$nameMS_corAMPPHslow-core.log', 
+                commandType='DP3'
+            )
+            data_in = "CORRECTED_DATA"
+        else:
+            Logger.warning(f"No fulljones Core corrections found.")
+        
+        
+        source_angular_diameter = 0.
+        baseline = "CS*"
+        stations = "{SuperStLBA:'%s'}" % baseline
+        
+        # Phaseup CORRECTED_DATA -> DATA
+        Logger.info('Phasing up all Core Stations...')
+        Logger.debug('Phasing up: '+ baseline)
+        lilf.check_rm(f'*{stats}.MS-phaseup')
+    
+        MSs.run(
+            f"DP3 {parset_dir}/DP3-phaseup.parset msin=$pathMS \
+                msin.datacolumn={data_in} msout=$pathMS-phaseup \
+                msout.datacolumn=DATA stationadd.stations={stations} filter.baseline=!{baseline}",       
+            log=f'$nameMS_phaseup.log', 
+            commandType="DP3"
+        )
+        os.system(f'rm -r *concat_{stats}.MS')
             
     MSs = MeasurementSets(
         glob.glob(f'*concat_{stats}.MS-phaseup'), 
@@ -537,8 +679,7 @@ def predict(MSs: MeasurementSets, doBLsmooth:bool = True) -> None:
         # Smooth DATA -> DATA
         Logger.info('BL-based smoothing...')
         MSs.run(
-            '/data/scripts/LiLF/scripts/BLsmooth_pol.py\
-                -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
+            'BLsmooth_pol.py -d -r -s 0.8 -i DATA -o SMOOTHED_DATA $pathMS', 
             log='$nameMS_smooth1.log', 
             commandType='python'
         )
@@ -558,8 +699,9 @@ def clean_specific(mode: str) -> None :
     
 def main(args: argparse.Namespace) -> None:
     stopping=False
+    setup()
     for stations in args.stations:
-        setup()
+        
         
         try:
             MSs = MeasurementSets(
@@ -582,9 +724,9 @@ def main(args: argparse.Namespace) -> None:
         calibration.empty_clean(f"img/{TARGET}-img-empty-int")
         sys.exit()
         '''
-        if stations == "dutch": 
+        if stations == "dutch" or stations == "int": 
             with WALKER.if_todo('phaseupCS ' + stations):
-                MSs = phaseup(MSs, stations, do_test=args.do_test)
+                MSs = phaseup(MSs, stations, do_test=args.do_test)#, sol_dir='/home/local/work/j.boxelaar/data/3Csurvey/tgts/3c401/')
             
             MSs = MeasurementSets(
                 glob.glob(f'*concat_{stations}.MS-phaseup'), 
@@ -597,11 +739,7 @@ def main(args: argparse.Namespace) -> None:
             clean_specific(stations)  
             
         # make beam region files
-        masking = pipeline.make_beam_region(MSs, TARGET)
-        
-        # Predict model    
-        with WALKER.if_todo('predict_' + stations):  
-            predict(MSs, doBLsmooth=False)
+        masking = pipeline.make_beam_region(MSs, TARGET, parset_dir)
         
         rms_noise_pre = np.inf
         mm_ratio_pre = 0
@@ -628,20 +766,27 @@ def main(args: argparse.Namespace) -> None:
             stats=stations,
             target=TARGET
         )
+        
         if args.no_phaseup:
             calibration.phased_up = False
         else:
-            calibration.phased_up = True
+            calibration.phased_up = True 
             
-        
+        # Predict model    
+        with WALKER.if_todo('predict_' + stations):  
+            if stations == "int":
+                #predict initial model from imaging step
+                calibration.clean(f"img/{TARGET}-img-predict")
+                #calibration.predict_from_img("img/3c401-image.fits")
+            else:
+                predict(MSs, doBLsmooth=False)
+            
         for cycle in calibration:
-            #calibration.empty_clean(f"img/img-empty-c{cycle}")
-            
             with WALKER.if_todo(f"cal_{stations}_c{cycle}"):
                 
                 if stations == "core":
                     if cycle == 1 or args.do_core_scalar_solve:
-                        calibration.solve_gain('scalar', solint=50) 
+                        calibration.solve_gain('phase') 
                     
                     if not args.scalar_only and cycle > 1:
                         calibration.solve_gain(
@@ -670,9 +815,10 @@ def main(args: argparse.Namespace) -> None:
                             )
                             
                 elif stations == "int":
-                    calibration.solve_gain('scalar')
-                    if cycle > 1:
-                        calibration.solve_gain('amplitude')
+                    calibration.solve_gain('phase')
+                    
+                    #if cycle > 1 and calibration.doamp:
+                    #    calibration.solve_gain('amplitude')
                             
 
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
@@ -680,7 +826,7 @@ def main(args: argparse.Namespace) -> None:
                 
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 try:
-                    calibration.clean(imagename, apply_beam=args.apply_beam)
+                    calibration.clean(imagename, apply_beam=args.apply_beam, uvlambdamin=100)
                     rms_noise_pre, mm_ratio_pre, stopping = calibration.prepare_next_iter(imagename, rms_noise_pre, mm_ratio_pre)
                 except RuntimeError:
                     Logger.error(f"Failed to clean {imagename}")
@@ -689,10 +835,10 @@ def main(args: argparse.Namespace) -> None:
                     calibration.ratio_history.append(mm_ratio_pre)
                     break
                 
-            if stopping or cycle == calibration.stop:
+            #if stopping or cycle == calibration.stop:
             #    Logger.info("Start Peeling")                
             #    #pipeline.peel(peel_mss, calibration.s)
-                break
+            #    break
             
         with WALKER.if_todo(f"save_{stations}_history"):
             np.savetxt(
@@ -707,7 +853,7 @@ def main(args: argparse.Namespace) -> None:
                 delimiter=",", 
                 header="mm ratio  after every calibration cycle"
             )
-            
+            '''
             if stations == "dutch":
                 pipeline.rename_final_images(sorted(glob.glob('img/img-all-*')), target = TARGET) 
             
@@ -716,10 +862,10 @@ def main(args: argparse.Namespace) -> None:
                     img/{TARGET}-img-final-MFS {TARGET}.skymodel --ref_freq 57.7e6 \
                     --fits_mask img/img-all-01-mask.fits --min_peak_flux_jy 0.005"
                 )
-            
-        if stations == "dutch":
-            calibration.clean(f"img/{TARGET}-img-deep", deep=True)
-            calibration.low_resolution_clean("img/img-low")   
+            '''
+        #if stations == "dutch":
+        #    calibration.clean(f"img/{TARGET}-img-deep", deep=True)
+        #    calibration.low_resolution_clean("img/img-low")   
         
         
     

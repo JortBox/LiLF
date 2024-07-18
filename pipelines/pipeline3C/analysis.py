@@ -108,7 +108,7 @@ class SED(object):
     def __str__(self) -> str:
         string_to_print = f"SED ({self.target}): \n"
         for flux in self.fluxes:
-            string_to_print += f"{flux.flux} at {flux.freq} \n"
+            string_to_print += f"{flux.flux} +/- {flux.error} at {flux.freq} \n"
         return string_to_print
         
         
@@ -224,7 +224,14 @@ class Source3C(object):
             return self.rms_value
         else:
             return self.rms_value
-            
+        
+    @property
+    def resolution(self) -> tuple[float, float]:
+        if not self.data_set:
+            return (0,0)
+        else:
+            return tuple((np.asarray([source.header["BMAJ"], source.header["BMIN"]])*u.deg).to(u.arcsec).value)
+          
 
 
 class Catalogue3C(object):
@@ -236,8 +243,8 @@ class Catalogue3C(object):
         else:
             self.suffix = "_" + suffix
         
-        self.__query_objects_simbad(targets)    
-        #self.__query_objects_ned(targets, use_cache=use_cache)
+        #self.__query_objects_simbad(targets)    
+        self.__query_objects_ned(targets, use_cache=use_cache)
         #self.__query_objects_vizier(targets)
         #self.save()
         
@@ -282,7 +289,7 @@ class Catalogue3C(object):
     
     @property
     def flux(self) -> np.ndarray:
-        return np.array([source.SED.flux["58MHz"] for source in self.sources])
+        return np.array([source.SED["58MHz"].flux for source in self.sources])
     
     @property
     def diameter(self) -> np.ndarray:
@@ -435,7 +442,6 @@ def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> fl
     mask_ddcal = full_image.imagename.replace(".fits", "_mask-ddcal.fits")  # this is used to find calibrators
     
     full_image.makeMask(
-        mode="default",
         threshpix=int(threshold),
         atrous_do=False,
         maskname=mask_ddcal,
@@ -444,7 +450,7 @@ def measure_flux(path: str, region=None, threshold: int=9, use_cache=True) -> fl
     )
     
     cal = AstroTab.read(mask_ddcal.replace("fits", "cat.fits"), format="fits")
-    cal = cal[np.where(cal["Total_flux"] > 10)]
+    cal = cal[np.where(cal["Total_flux"] > 7)]
     cal.sort(["Total_flux"], reverse=True)
 
     return cal["Total_flux"][0]
@@ -531,6 +537,23 @@ def get_integrated_flux(source: Source3C, size: int = 100, threshold: float = 9,
         a1 = -0.699
         a2 = -0.110
         S = a0 * 10**(a1 * np.log10(57.7/150)) * 10**(a2 * np.log10(57.7/150)**2) * u.Jy
+        print("scaife flux",S)
+        print("fraction",total_flux/S)
+        
+    elif source.name == "3c380":
+        a0 = 77.352
+        a1 = -0.767
+        S = a0 * 10**(a1 * np.log10(57.7/150)) * u.Jy
+        print("scaife flux",S)
+        print("fraction",total_flux/S)
+        
+    elif source.name == "3c295":
+        a0 = 97.763
+        a1 = -0.582
+        a2 = -0.298
+        a3 = 0.583 
+        a4 = -0.363
+        S = a0 * 10**(a1 * np.log10(57.7/150)) * 10**(a2 * np.log10(57.7/150)**2) * 10**(a3 * np.log10(57.7/150)**3) * 10**(a4 * np.log10(57.7/150)**4) * u.Jy
         print("scaife flux",S)
         print("fraction",total_flux/S)
         
