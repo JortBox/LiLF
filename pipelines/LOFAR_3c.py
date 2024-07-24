@@ -598,7 +598,7 @@ def main(args: argparse.Namespace) -> None:
             with WALKER.if_todo(f"image-{stations}-c{cycle}" ):
                 imagename = f'img/img-{stations}-{cycle:02d}'
                 try:
-                    if TARGET == "3c274":
+                    if TARGET in ["3c274"]:#,"3c236"]:
                         calibration.mask = pipeline.make_beam_region(MSs, TARGET+"_core", parset_dir)
                         calibration.clean(imagename+"_center", apply_beam=args.apply_beam)
                         calibration.mask = pipeline.make_beam_region(MSs, TARGET, parset_dir)

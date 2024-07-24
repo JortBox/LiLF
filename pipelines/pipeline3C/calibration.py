@@ -20,12 +20,12 @@ TARGET = os.getcwd().split('/')[-1]
 extended_targets = [
     '3c223','3c284','3c274',
     '3c285','3c293','3c31',#'3c296',
-    '3c310','3c326',
+    '3c310','3c326', '3c236',
     '3c33','3c35','3c382','3c386','3c442a','3c449',
     '3c454.3','3c465','3c84', '4c73.08', 'ngc6109'#, 'ngc6251'
 ]
 
-very_extended_targets = ['da240','3c236', 'ngc6251']
+very_extended_targets = ['da240', 'ngc6251']
 
 difficult_targets = ["4c12.03", "3c212", "3c191"]
 
@@ -38,7 +38,8 @@ class SelfCalibration(object):
             total_cycles: int = 10, 
             doslow: bool = False, 
             stats: str = "",
-            target: str =  ""
+            target: str =  "",
+            int_sol: bool = False
         ):
         global TARGET
         if target != "":
@@ -53,13 +54,16 @@ class SelfCalibration(object):
         self.s = schedule
         
         if stats == "core":
-            self.solint_fj = lib_util.Sol_iterator([200,100,50,10])
+            if int_sol:
+                self.solint_fj = lib_util.Sol_iterator([400,200,100,50])
+            else:
+                self.solint_fj = lib_util.Sol_iterator([200,100,50,10])
             self.solint_amp = lib_util.Sol_iterator([200,100,50,10])
             self.solint_ph = lib_util.Sol_iterator([1])
         elif stats == "int":
             self.solint_fj = lib_util.Sol_iterator([800, 400, 200,100,50])
             self.solint_amp = lib_util.Sol_iterator([800, 400, 200,100,50])
-            self.solint_ph = lib_util.Sol_iterator([16,16,16,16,10,5,1])
+            self.solint_ph = lib_util.Sol_iterator([20,20,20,20,10,5,1])
         else:
             self.solint_fj = lib_util.Sol_iterator([400, 200,100,50])
             self.solint_amp = lib_util.Sol_iterator([400, 200,100,50])
@@ -92,7 +96,7 @@ class SelfCalibration(object):
     def subtract_infield_source(self, sub_source: str, path_to_model: str = ""):
         logger.info(f'Subtracting {sub_source}...')
         
-        logger.info(f'load {sub_source} model into SUB_MODEL_DATA (DP3)...')
+        
         '''
         # Predict MODEL_DATA
         os.system(f'makesourcedb outtype="blob" format="<" in={path_to_model}/{sub_source}.skymodel out={sub_source}.skydb')
@@ -105,6 +109,7 @@ class SelfCalibration(object):
         '''
         
         model_img = sorted(glob.glob(f'{path_to_model}/img/img-all-*-MFS-model.fits'))[-2]
+        logger.info(f'load {model_img} model into MODEL_DATA (WSclean)...')
         self.mss.scheduler.add(
             f"wsclean -predict -name {model_img} \
                 -j {self.mss.scheduler.max_processors} -channels-out 2 -reorder \
@@ -127,9 +132,9 @@ class SelfCalibration(object):
                 soltab = "cor.soltab=[amplitude000,phase000]"
             
             logger.info(f'corrupt model with {solution}...')
-            self.mss.run( # was MSs
+            self.mss.run(
                 f"DP3 {parset_dir}/DP3-cor.parset msin=$pathMS \
-                    msin.datacolumn=SUB_MODEL_DATA msout.datacolumn=SUB_MODEL_DATA \
+                    msin.datacolumn=MODEL_DATA msout.datacolumn=SUB_MODEL_DATA \
                     cor.invert=False cor.parmdb={solution} \
                     cor.correction={correction} {soltab}",
                 log="$nameMS_corrupt.log",
@@ -220,7 +225,7 @@ class SelfCalibration(object):
         logger.info(f'Solving {mode} (Datacolumn: {self.data_column})...')
         if mode == 'phase':
             if self.stats == "int":
-                smoothcons = "0.2e6"
+                smoothcons = "1e6"
                 constraint = "sol.coreconstraint=70000"
             else:
                 smoothcons = "1e6"
@@ -340,7 +345,7 @@ class SelfCalibration(object):
         elif mode == 'fulljones':
             #if self.stats == "core": smoothcons = '0'
             #else: smoothcons = '0.1e6'
-            if TARGET in extended_targets or TARGET in difficult_targets:
+            if TARGET in extended_targets or TARGET in very_extended_targets or TARGET in difficult_targets:
                 smoothcons = '1.e6'
             else:
                 smoothcons = '0.1 e6'
@@ -453,12 +458,12 @@ class SelfCalibration(object):
             kwargs1 = {
                 'weight': 'briggs -0.7', 
                 'multiscale_scale_bias':0.5, 
-                'taper_gaussian': '15arcsec'
+                'taper_gaussian': '20arcsec'
             }
             kwargs2 = {
                 'weight': 'briggs -0.7',
                 'multiscale_scale_bias':0.5,  
-                'taper_gaussian': '15arcsec', 
+                'taper_gaussian': '20arcsec', 
                 'multiscale_scales': '0,15,30,60,120,240'
             }
         elif self.stats == "int":

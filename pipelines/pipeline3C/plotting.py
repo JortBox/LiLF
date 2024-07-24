@@ -161,10 +161,10 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
     gc.add_beam(color="none", edgecolor=annotation_color)
     gc.add_label(0.495, 0.94, source.name, relative=True, size=25, color=annotation_color)
     
-    #gc.add_colorbar()
-    #gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
-    #gc.colorbar.set_axis_label_font(size=fontsize)
-    #gc.colorbar.set_font(size=fontsize)
+    gc.add_colorbar()
+    gc.colorbar.set_axis_label_text("Jy beam$^{-1}$")
+    gc.colorbar.set_axis_label_font(size=fontsize)
+    gc.colorbar.set_font(size=fontsize)
     axes = aplpy.AxisLabels(gc)
     axes.hide()
     
@@ -181,9 +181,9 @@ def plot_galaxy(source: Source3C, suffix: str = "", vmin=None, vmax=None, size =
 
     gc.tick_labels.set_font(size=fontsize)
     gc.axis_labels.set_font(size=fontsize)
-    if not os.path.exists("plots_nc/"):
-        os.mkdir("plots_nc/")
-    gc.save(f"plots_nc/{source.name}{suffix}_no_contour.pdf")
+    if not os.path.exists("plots_nccb/"):
+        os.mkdir("plots_nccb/")
+    gc.save(f"plots_nccb/{source.name}{suffix}.pdf")
     
     os.remove('test.fits')
     plt.clf()
@@ -194,8 +194,8 @@ if __name__ == "__main__":
 
     
     all_targets = [target.split("/")[-1] for target in sorted(glob.glob(f"{DATA_DIR_HOME}/*"))]
-    catalog = asis.Catalogue3C(all_targets, use_cache=False)
-    #catalog = asis.Catalogue3C(["3c274"], use_cache=False)
+    #catalog = asis.Catalogue3C(all_targets, use_cache=False)
+    catalog = asis.Catalogue3C(["3c31"], use_cache=False)
     
     for source in catalog:
         paths = sorted(glob.glob(f"{DATA_DIR_LOCAL}/{source.name}/img/img-all-*-MFS-image.fits"))
@@ -216,14 +216,20 @@ if __name__ == "__main__":
             continue
         
         vmax=1
-        if source.name in very_extended_targets or source.name in ["3c274", "3c236"]:
+        if source.name in very_extended_targets or source.name == "3c274":
             size = int(source.data.shape[0]//2)
             vmax = 0.2
+        elif source.name == "3c236":
+            size=1500
+            vmax = 0.05
+        elif source.name == "3c31":
+            size = 1200
+            vmax = 0.2
         elif source.name in extended_targets:
-            size = 800
+            size = 1200
         else:
             size=300
-            
+
         plot_galaxy(source, vmax=vmax, vmin=-4.*source.rms.value, size=size)
         
         #try: plot_SED(source)

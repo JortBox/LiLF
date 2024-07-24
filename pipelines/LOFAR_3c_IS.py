@@ -699,7 +699,7 @@ def clean_specific(mode: str) -> None :
     
 def main(args: argparse.Namespace) -> None:
     stopping=False
-    setup()
+    #setup()
     for stations in args.stations:
         
         
@@ -724,6 +724,26 @@ def main(args: argparse.Namespace) -> None:
         calibration.empty_clean(f"img/{TARGET}-img-empty-int")
         sys.exit()
         '''
+        
+        # REMOVE
+        if stations in ["core","dutch"]:
+            sol_dir=f'/home/local/work/j.boxelaar/data/3Csurvey/tgts/{TARGET}/'
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA msout.datacolumn=DATA \
+                    cor.parmdb={sol_dir}cal-Gph-c03-core-ampnorm.h5 cor.correction=phase000',
+                log='$nameMS_corPH-core.log', 
+                commandType='DP3'
+            )
+            
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA msout.datacolumn=DATA \
+                    cor.parmdb={sol_dir}cal-Ga-c03-core-ampnorm.h5 cor.correction=fulljones \
+                    cor.soltab=[amplitude000,phase000]',
+                log='$nameMS_corAMPPHslow-core.log', 
+                commandType='DP3'
+            )
+            
+        
         if stations == "dutch" or stations == "int": 
             with WALKER.if_todo('phaseupCS ' + stations):
                 MSs = phaseup(MSs, stations, do_test=args.do_test)#, sol_dir='/home/local/work/j.boxelaar/data/3Csurvey/tgts/3c401/')
@@ -733,6 +753,24 @@ def main(args: argparse.Namespace) -> None:
                 SCHEDULE, 
                 check_flags=False, 
                 check_sun=True
+            )
+        
+        # REMOVE    
+        if stations == "dutch":
+            sol_dir=f'/home/local/work/j.boxelaar/data/3Csurvey/tgts/{TARGET}/'
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA msout.datacolumn=DATA \
+                    cor.parmdb={sol_dir}cal-Gp-c06-all-ampnorm.h5 cor.correction=phase000',
+                log='$nameMS_corPH-core.log', 
+                commandType='DP3'
+            )
+            
+            MSs.run(
+                f'DP3 {parset_dir}/DP3-cor.parset msin=$pathMS msin.datacolumn=DATA msout.datacolumn=DATA \
+                    cor.parmdb={sol_dir}cal-Ga-c06-all-ampnorm.h5 cor.correction=fulljones \
+                    cor.soltab=[amplitude000,phase000]',
+                log='$nameMS_corAMPPHslow-core.log', 
+                commandType='DP3'
             )
             
         with WALKER.if_todo(f"clean_{stations}"):
@@ -764,7 +802,8 @@ def main(args: argparse.Namespace) -> None:
             total_cycles=total_cycles, 
             mask=masking, 
             stats=stations,
-            target=TARGET
+            target=TARGET,
+            int_sol=True
         )
         
         if args.no_phaseup:
@@ -776,8 +815,8 @@ def main(args: argparse.Namespace) -> None:
         with WALKER.if_todo('predict_' + stations):  
             if stations == "int":
                 #predict initial model from imaging step
-                calibration.clean(f"img/{TARGET}-img-predict")
-                #calibration.predict_from_img("img/3c401-image.fits")
+                #calibration.clean(f"img/{TARGET}-img-predict")
+                calibration.predict_from_img(f"img/{TARGET}-image.fits")
             else:
                 predict(MSs, doBLsmooth=False)
             
@@ -835,10 +874,10 @@ def main(args: argparse.Namespace) -> None:
                     calibration.ratio_history.append(mm_ratio_pre)
                     break
                 
-            #if stopping or cycle == calibration.stop:
+            if (stopping or cycle == calibration.stop) and stations == "dutch":
             #    Logger.info("Start Peeling")                
             #    #pipeline.peel(peel_mss, calibration.s)
-            #    break
+                break
             
         with WALKER.if_todo(f"save_{stations}_history"):
             np.savetxt(
